@@ -8,9 +8,44 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "django (>=6.0.7,<7.0.0)",
+    "python-dotenv (>=1.2.2,<2.0.0)",
+    "psycopg2-binary (>=2.9.12,<3.0.0)",
+    "djangorestframework (>=3.17.1,<4.0.0)",
+    "djangorestframework-simplejwt (>=5.5.1,<6.0.0)"
 ]
 
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+lint = [
+    "isort (>=8.0.1,<9.0.0)",
+    "black (>=26.5.1,<27.0.0)",
+    "flake8 (>=7.3.0,<8.0.0)",
+    "mypy (>=2.3.0,<3.0.0)"
+]
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+line-length = 119
+exclude = '''
+/(
+\.venv|
+\.git|
+\.mypy_cache|
+\.pytest_cache|
+build|
+dist
+venv
+)/
+'''
+
+[tool.mypy]
+disallow_untyped_defs = true
+warn_return_any = true
+exclude_gitignore = true
