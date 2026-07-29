@@ -49,6 +49,7 @@ class Quest(models.Model):
     status: models.CharField = models.CharField(
         max_length=12, choices=STATUS_CHOICES, verbose_name="Статус", default="created"
     )
+    report: models.TextField = models.TextField(blank=True, null=True, verbose_name="Отчет")
 
     class Meta:
         """Настройки отображения"""
