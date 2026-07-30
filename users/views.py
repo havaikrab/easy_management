@@ -1,6 +1,8 @@
 from typing import Any
 
+from django.db.models import ProtectedError
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -28,6 +30,16 @@ class EmployeeViewSet(ModelViewSet):
             self.serializer_class = EmployeeBaseSerializer
 
         return super().get_serializer_class()
+
+    def perform_destroy(self, instance: Employee) -> None:
+        """Исключает возможность удаления сотрудника, являющегося руководителем для другого сотрудника"""
+
+        try:
+            instance.delete()
+        except ProtectedError:
+            raise ValidationError(
+                "Удаление аккаунта сотрудника запрещено, пока он является руководителем для других сотрудников"
+            )
 
 
 class EmployeeChangePasswordAPIView(APIView):

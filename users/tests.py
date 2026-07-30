@@ -1,7 +1,7 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from users.models import Employee
+from .models import Employee
 
 
 class EmployeeTestCase(APITestCase):
@@ -102,6 +102,13 @@ class EmployeeTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(len(Employee.objects.all()), 11)
+
+    def test_employee_failed_delete(self) -> None:
+        """Неудачная попытка уволить сотрудника, имеющего подчиненных"""
+
+        response = self.client.delete("/users/4/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_employee_change_password(self) -> None:
         """Смена пароля пользователя"""
