@@ -17,7 +17,7 @@ from .serializers import (
 class EmployeeViewSet(ModelViewSet):
     """Вьюсет для модели сотрудника"""
 
-    queryset = Employee.objects.all()
+    queryset = Employee.objects.exclude(readiness="automated")
 
     def get_serializer_class(self) -> type:
         """Определяет класс сериализатора в зависимости от действия контроллера"""

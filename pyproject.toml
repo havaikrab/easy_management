@@ -55,3 +55,15 @@ venv
 disallow_untyped_defs = true
 warn_return_any = true
 exclude_gitignore = true
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "*/migrations/*",
+    "users/tests.py",
+    "management/tests.py",
+    "manage.py",
+    "*/wsgi.py",
+    "*/asgi.py",
+    "*/apps.py",
+]
