@@ -25,8 +25,11 @@ class Activity(models.Model):
 class Quest(models.Model):
     """Модель задачи"""
 
-    title: models.CharField = models.CharField(unique=True, max_length=200, verbose_name="Формулировка задачи")
+    title: models.CharField = models.CharField(max_length=200, verbose_name="Формулировка задачи")
     description: models.TextField = models.TextField(verbose_name="Описание задачи")
+    creator: models.ForeignKey = models.ForeignKey(
+        Employee, on_delete=models.SET_NULL, related_name="commands", null=True, verbose_name="Заявитель"
+    )
     related_quest: models.ForeignKey = models.ForeignKey(
         "self", on_delete=models.SET_NULL, related_name="sub_quests", null=True, verbose_name="Задача-родитель"
     )
@@ -41,13 +44,13 @@ class Quest(models.Model):
     STATUS_CHOICES = [
         ("1_created", "Создана"),
         ("2_processing", "Обрабатывается"),
-        ("3_failed", "Не выполнена"),
+        ("3_sabotaged", "Выполнение прервано"),
         ("4_expired", "Просрочена"),
         ("5_cancelled", "Отменена"),
         ("6_success", "Успешно завершена"),
     ]
     status: models.CharField = models.CharField(
-        max_length=12, choices=STATUS_CHOICES, verbose_name="Статус", default="created"
+        max_length=12, choices=STATUS_CHOICES, verbose_name="Статус", default="1_created"
     )
     report: models.TextField = models.TextField(blank=True, null=True, verbose_name="Отчет")
 

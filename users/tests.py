@@ -53,7 +53,7 @@ class EmployeeTestCase(APITestCase):
         response = self.client.get("/users/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 10)
+        self.assertEqual(len(response.data), 11)
 
     def test_getting_employee_detail(self) -> None:
         """Просмотр информации о сотруднике"""

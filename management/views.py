@@ -2,8 +2,8 @@ from django.db.models import ProtectedError
 from rest_framework.exceptions import ValidationError
 from rest_framework.viewsets import ModelViewSet
 
-from .models import Activity
-from .serializers import ActivitySerializer
+from .models import Activity, Quest
+from .serializers import ActivitySerializer, QuestCreatingSerializer, QuestSerializer
 
 
 class ActivityViewSet(ModelViewSet):
@@ -18,4 +18,20 @@ class ActivityViewSet(ModelViewSet):
         try:
             instance.delete()
         except ProtectedError:
-            raise ValidationError("Удаление должности невозможно, это повлечет повреждение структуры данных")
+            raise ValidationError("Удаление выбранной должности невозможно, это вызовет повреждение структуры данных")
+
+
+class QuestViewSet(ModelViewSet):
+    """Вьюсет для модели задачи"""
+
+    queryset = Quest.objects.all()
+
+    def get_serializer_class(self) -> type:
+        """Определяет класс сериализатора в зависимости от
+        совершаемого пользователем действия и его роли по отношению к задаче"""
+
+        if self.action == "create":
+            self.serializer_class = QuestCreatingSerializer
+        else:
+            self.serializer_class = QuestSerializer
+        return self.serializer_class
