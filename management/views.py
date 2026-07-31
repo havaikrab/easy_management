@@ -31,8 +31,15 @@ class QuestViewSet(ModelViewSet):
         совершаемого пользователем действия и его роли по отношению к задаче"""
 
         if self.action == "create":
-            print(11111111111111111111111111111111)
             self.serializer_class = QuestCreatingSerializer
         else:
             self.serializer_class = QuestSerializer
         return self.serializer_class
+
+    def perform_destroy(self, instance: Quest) -> None:
+        """Исключает возможность удаления задачи, имеющей подзадачи"""
+
+        try:
+            instance.delete()
+        except ProtectedError:
+            raise ValidationError("Удаление задачи запрещено, пока она имеет связанные подзадачи")

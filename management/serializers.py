@@ -22,7 +22,7 @@ class QuestSerializer(serializers.ModelSerializer):
 
         model = Quest
         fields = "__all__"
-        read_only_fields = ["path_to_root"]
+        read_only_fields = ["id", "path_to_root"]
 
     def update(self, instance: Quest, validated_data: dict) -> Quest:
 
