@@ -1,7 +1,10 @@
+from typing import Any
+
 from rest_framework import serializers
 from rest_framework.fields import CurrentUserDefault
 
 from .models import Activity, Quest
+from .validators import dead_line_validator
 
 
 class ActivitySerializer(serializers.ModelSerializer):
@@ -23,6 +26,12 @@ class QuestSerializer(serializers.ModelSerializer):
         model = Quest
         fields = "__all__"
         read_only_fields = ["id", "path_to_root"]
+
+    def validate(self, attrs: dict) -> Any:
+        """Комплексная валидация параметров обновляемой задачи"""
+
+        dead_line_validator(attrs, quest=self.instance)
+        return super().validate(attrs)
 
     def update(self, instance: Quest, validated_data: dict) -> Quest:
 
@@ -67,6 +76,12 @@ class QuestCreatingSerializer(serializers.ModelSerializer):
             "path_to_root",
         ]
         read_only_fields = ["path_to_root"]
+
+    def validate(self, attrs: dict) -> Any:
+        """Комплексная валидация параметров создаваемой задачи"""
+
+        dead_line_validator(attrs)
+        return super().validate(attrs)
 
     def create(self, validated_data: dict) -> Quest:
 

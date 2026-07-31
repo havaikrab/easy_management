@@ -240,3 +240,44 @@ class QuestTestCase(APITestCase):
 
         self.assertEqual(success_delete.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(len(Quest.objects.all()), 10)
+
+
+class QuestSpecialTestCase(APITestCase):
+    """Группа специфичных тестов для модели Quest"""
+
+    fixtures = ["activities_fixture.json", "employees_fixture.json", "quests_fixture.json"]
+
+    def setUp(self) -> None:
+        """Предварительная авторизация пользователя"""
+
+        self.user = Employee.objects.get(username="8024IvIvc0e0")
+        self.client.force_authenticate(user=self.user)
+
+    def test_quest_dead_line_validator(self) -> None:
+        """Проверка валидатора поля dead_line"""
+
+        self.assertEqual(len(Quest.objects.all()), 11)
+
+        quest_data = {
+            "title": "Помыть посуду",
+            "description": "Быстро!",
+            "operator": 2,
+            "required": 1,
+            "dead_line": "2000-07-31T15:35:00.112233+07:00",
+        }
+        response_1 = self.client.post("/quests/", data=quest_data)
+
+        self.assertEqual(response_1.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual("Срок выполнения задачи не может быть задан в прошлом" in str(response_1.data), True)
+        self.assertEqual(len(Quest.objects.all()), 11)
+
+        quest_data["dead_line"] = "2030-07-31T15:35:00.112233+07:00"
+        response_2 = self.client.patch("/quests/6/", data=quest_data)
+
+        self.assertEqual(response_2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(len(Quest.objects.all()), 11)
+        self.assertEqual(
+            "Срок выполнения текущей задачи не должен превышать срок выполнения зависимой от нее задачи"
+            in str(response_2.data),
+            True,
+        )
