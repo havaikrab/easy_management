@@ -281,3 +281,43 @@ class QuestSpecialTestCase(APITestCase):
             in str(response_2.data),
             True,
         )
+
+    def test_checking_operator_readiness(self) -> None:
+        """Проверка соответствия назначаемого сотрудника требованиям задачи"""
+
+        quest_data = {
+            "title": "Подмести цех",
+            "description": "Директор ругается, что на производстве бардак, нужно подмести в цехе",
+            "dead_line": "2026-08-01T19:45:00.0Z",
+        }
+        response_1 = self.client.post("/quests/", data=quest_data)
+
+        self.assertEqual(response_1.status_code, status.HTTP_400_BAD_REQUEST)
+
+        quest_data["required"] = "8"
+        response_2 = self.client.post("/quests/", data=quest_data)
+        response_2.data.pop("dead_line")
+
+        self.assertEqual(response_2.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response_2.data,
+            {
+                "title": "Подмести цех",
+                "description": "Директор ругается, что на производстве бардак, нужно подмести в цехе",
+                "related_quest": None,
+                "operator": None,
+                "required": 8,
+                "path_to_root": "",
+            },
+        )
+
+        new_quest = Quest.objects.get(title__startswith="Подмести")
+
+        response_3 = self.client.patch(f"/quests/{new_quest.pk}/", data={"operator": 12})
+        self.assertEqual(response_3.status_code, status.HTTP_400_BAD_REQUEST)
+
+        response_4 = self.client.patch(f"/quests/{new_quest.pk}/", data={"operator": 8})
+        self.assertEqual(response_4.status_code, status.HTTP_400_BAD_REQUEST)
+
+        response_5 = self.client.patch(f"/quests/{new_quest.pk}/", data={"required": 10, "operator": 11})
+        self.assertEqual(response_5.status_code, status.HTTP_400_BAD_REQUEST)

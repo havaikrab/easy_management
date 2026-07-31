@@ -38,7 +38,7 @@
         "father_name": "Альбертович",
         "activity": 1,
         "manager": null,
-        "readiness": "not_available",
+        "readiness": "ready_to_work",
         "groups": [],
         "user_permissions": []
     }

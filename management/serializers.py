@@ -4,7 +4,7 @@ from rest_framework import serializers
 from rest_framework.fields import CurrentUserDefault
 
 from .models import Activity, Quest
-from .validators import dead_line_validator
+from .validators import check_operator_readiness, dead_line_validator
 
 
 class ActivitySerializer(serializers.ModelSerializer):
@@ -31,9 +31,11 @@ class QuestSerializer(serializers.ModelSerializer):
         """Комплексная валидация параметров обновляемой задачи"""
 
         dead_line_validator(attrs, quest=self.instance)
+        check_operator_readiness(attrs, quest=self.instance)
         return super().validate(attrs)
 
     def update(self, instance: Quest, validated_data: dict) -> Quest:
+        """Исправление значения поля path_to_root у всех подзадач при изменении ссылки на родительскую задачу"""
 
         for k, v in validated_data.items():
             setattr(instance, k, v)
@@ -81,9 +83,11 @@ class QuestCreatingSerializer(serializers.ModelSerializer):
         """Комплексная валидация параметров создаваемой задачи"""
 
         dead_line_validator(attrs)
+        check_operator_readiness(attrs)
         return super().validate(attrs)
 
     def create(self, validated_data: dict) -> Quest:
+        """Формирование значения для поля path_to_root при сохранении объекта"""
 
         parent = validated_data.get("related_quest")
         if isinstance(parent, Quest):
