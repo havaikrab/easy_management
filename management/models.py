@@ -31,7 +31,7 @@ class Quest(models.Model):
         Employee, on_delete=models.SET_NULL, related_name="commands", null=True, verbose_name="Заявитель"
     )
     related_quest: models.ForeignKey = models.ForeignKey(
-        "self", on_delete=models.SET_NULL, related_name="sub_quests", null=True, verbose_name="Задача-родитель"
+        "self", on_delete=models.PROTECT, related_name="sub_quests", null=True, verbose_name="Задача-родитель"
     )
     operator: models.ForeignKey = models.ForeignKey(
         Employee, on_delete=models.SET_NULL, related_name="tasks", null=True, verbose_name="Ответственный исполнитель"
@@ -40,7 +40,7 @@ class Quest(models.Model):
         Activity, on_delete=models.PROTECT, related_name="responsibilities", verbose_name="Ответственная должность"
     )
     created_at: models.DateTimeField = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
-    dead_line: models.DateTimeField = models.DateTimeField(null=True, verbose_name="Дата создания")
+    dead_line: models.DateTimeField = models.DateTimeField(verbose_name="Назначенный срок")
     STATUS_CHOICES = [
         ("1_created", "Создана"),
         ("2_processing", "Обрабатывается"),
@@ -53,6 +53,7 @@ class Quest(models.Model):
         max_length=12, choices=STATUS_CHOICES, verbose_name="Статус", default="1_created"
     )
     report: models.TextField = models.TextField(blank=True, null=True, verbose_name="Отчет")
+    path_to_root: models.TextField = models.TextField(verbose_name="Последовательность задач-родителей", db_index=True)
 
     class Meta:
         """Настройки отображения"""

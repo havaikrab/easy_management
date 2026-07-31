@@ -31,6 +31,7 @@ class QuestViewSet(ModelViewSet):
         совершаемого пользователем действия и его роли по отношению к задаче"""
 
         if self.action == "create":
+            print(11111111111111111111111111111111)
             self.serializer_class = QuestCreatingSerializer
         else:
             self.serializer_class = QuestSerializer
