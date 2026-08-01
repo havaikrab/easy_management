@@ -300,15 +300,16 @@ class QuestSpecialTestCase(APITestCase):
         quest_data["required"] = "8"
         response_2 = self.client.post("/quests/", data=quest_data)
         response_2.data.pop("dead_line")
+        operator_pk = response_2.data.pop("operator")
 
         self.assertEqual(response_2.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(operator_pk in [5, 6], True)
         self.assertEqual(
             response_2.data,
             {
                 "title": "Подмести цех",
                 "description": "Директор ругается, что на производстве бардак, нужно подмести в цехе",
                 "related_quest": None,
-                "operator": None,
                 "required": 8,
                 "path_to_root": "",
             },
@@ -388,3 +389,58 @@ class QuestSpecialTestCase(APITestCase):
             ),
             dict(),
         )
+
+
+class QuestTransferResponsibilityCase(APITestCase):
+    """Тест разделения ответственности за выполнение большой задачи сотрудниками с одинаковой должностью"""
+
+    fixtures = ["activities_fixture.json", "employees_fixture.json", "quests_fixture.json"]
+
+    def setUp(self) -> None:
+        """Предварительная авторизация пользователя"""
+
+        self.user = Employee.objects.get(username="8064AlAla551")
+        self.client.force_authenticate(user=self.user)
+
+    def test_quest_division(self) -> None:
+        """Тест функции автоматического назначения исполнителя задачи"""
+
+        parent_task = Quest.objects.create(
+            title="Родительская задача",
+            description="Родительское описание",
+            creator=self.user,
+            operator=Employee.objects.get(username="8068DaDa0b6d"),
+            required=self.user.activity,
+            dead_line="2026-09-12T15:21:54.527Z",
+        )
+        for i in range(1, 4):
+            child_task_data = {
+                "title": f"Подзадача №{i}",
+                "description": "Описание",
+                "related_quest": parent_task.pk,
+                "required": self.user.activity.pk,
+                "dead_line": f"2026-09-0{i}T15:21:54.527Z",
+            }
+            response = self.client.post("/quests/", data=child_task_data)
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        new_tasks = Quest.objects.filter(status="1_created", required=self.user.activity)
+        self_user_tasks = Quest.objects.filter(operator__username="8064AlAla551", status="1_created")
+        user_6_tasks = Quest.objects.filter(operator__username="8068DaDa0b6d", status="1_created")
+
+        self.assertEqual((len(new_tasks), len(self_user_tasks), len(user_6_tasks)), (4, 1, 3))
+
+    def test_quest_auto_sabotaged_status(self) -> None:
+        """Создание задачи для несуществующего сотрудника"""
+
+        sabotaged_task_data = {
+            "title": "Задача",
+            "description": "Задача для сотрудника, которого нет в организации",
+            "required": Activity.objects.get(name="Оператор ЧПУ").pk,
+            "dead_line": "2026-09-01T15:21:54.527Z",
+        }
+        sabotaged_response = self.client.post("/quests/", data=sabotaged_task_data)
+        new_task = Quest.objects.get(title="Задача")
+
+        self.assertEqual(sabotaged_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(new_task.status, "3_sabotaged")

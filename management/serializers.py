@@ -3,7 +3,10 @@ from typing import Any
 from rest_framework import serializers
 from rest_framework.fields import CurrentUserDefault
 
+from users.models import Employee
+
 from .models import Activity, Quest
+from .services import operator_auto_setting
 from .validators import check_operator_readiness, dead_line_validator
 
 
@@ -37,6 +40,7 @@ class QuestSerializer(serializers.ModelSerializer):
     def update(self, instance: Quest, validated_data: dict) -> Quest:
         """Исправление значения поля path_to_root у всех подзадач при изменении ссылки на родительскую задачу"""
 
+        instance = super().update(instance, validated_data)
         for k, v in validated_data.items():
             setattr(instance, k, v)
         if "related_quest" in validated_data:
@@ -54,6 +58,8 @@ class QuestSerializer(serializers.ModelSerializer):
                 child.path_to_root = updated_path
                 update_list.append(child)
             Quest.objects.bulk_update(update_list, fields=["path_to_root"])
+        if not isinstance(instance.operator, Employee):
+            instance = operator_auto_setting(instance)
         instance.save()
         return instance
 
@@ -94,4 +100,8 @@ class QuestCreatingSerializer(serializers.ModelSerializer):
             path_to_root = f"{parent.path_to_root}{parent.pk}/"
         else:
             path_to_root = ""
-        return Quest.objects.create(path_to_root=path_to_root, **validated_data)
+        quest = Quest(path_to_root=path_to_root, **validated_data)
+        if not isinstance(quest.operator, Employee):
+            quest = operator_auto_setting(quest)
+        quest.save()
+        return quest

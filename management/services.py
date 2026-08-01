@@ -42,7 +42,7 @@ def operator_auto_setting(quest: Quest) -> Quest:
                     for value in relevant_operators.values():
                         if quest.related_quest in value["quests"]:
                             related_quest_operator = value["object"]
-                            difference = len(value["quests"]) - len(relevant_operators[less_busy.pk]["quests"])
+                            difference = len(value["quests"]) - len(relevant_operators[str(less_busy.pk)]["quests"])
                             if difference <= 2:
                                 quest.operator = related_quest_operator
                                 quest.report += f'\nСотрудник ID "{related_quest_operator.username}" автоматически назначен ответственным исполнителем'
