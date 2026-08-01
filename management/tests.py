@@ -1,11 +1,13 @@
 from datetime import datetime, timezone
 
+from freezegun import freeze_time
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from users.models import Employee
 
 from .models import Activity, Quest
+from .services import get_operators_with_quests
 
 
 class ActivityTestCase(APITestCase):
@@ -107,6 +109,7 @@ class QuestTestCase(APITestCase):
         self.user = Employee.objects.get(username="8024IvIvc0e0")
         self.client.force_authenticate(user=self.user)
 
+    @freeze_time("2026-07-30T15:35:00.0Z")
     def test_quest_creating(self) -> None:
         """Создание задачи"""
 
@@ -321,3 +324,67 @@ class QuestSpecialTestCase(APITestCase):
 
         response_5 = self.client.patch(f"/quests/{new_quest.pk}/", data={"required": 10, "operator": 11})
         self.assertEqual(response_5.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_getting_operators_with_quests(self) -> None:
+        """Тест функции get_operators_with_quests"""
+
+        required_activity = Activity.objects.get(name="Слесарь")
+        new_task = {
+            "title": "Подмести цех",
+            "description": "Директор ругается, что на производстве бардак, нужно подмести в цехе",
+            "operator": 5,
+            "required": required_activity.pk,
+            "dead_line": "2026-10-01T19:45:00.0Z",
+        }
+        response_post = self.client.post("/quests/", data=new_task)
+
+        self.assertEqual(response_post.status_code, status.HTTP_201_CREATED)
+
+        operators_1 = get_operators_with_quests(required_activity, ["1_created", "6_success"])
+        operator_5 = Employee.objects.get(username="8064AlAla551")
+        operator_6 = Employee.objects.get(username="8068DaDa0b6d")
+        operator_7 = Employee.objects.get(username="8024IvIvhds0")
+        operator_8 = Employee.objects.get(username="7753AlAlls6s")
+        quest_7 = Quest.objects.get(title__startswith="Подготовить место")
+        quest_12 = Quest.objects.get(title__startswith="Подмести")
+
+        self.assertEqual(
+            operators_1,
+            {"5": {"object": operator_5, "quests": [quest_12]}, "6": {"object": operator_6, "quests": [quest_7]}},
+        )
+
+        response_quest_patch = self.client.patch(f"/quests/{quest_12.pk}/", data={"status": "3_sabotaged"})
+        operators_2 = get_operators_with_quests(required_activity, ["1_created", "3_sabotaged"])
+
+        self.assertEqual(response_quest_patch.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            operators_2, {"5": {"object": operator_5, "quests": [quest_12]}, "6": {"object": operator_6, "quests": []}}
+        )
+
+        operator_5.readiness = "not_available"
+        operator_5.save()
+        quest_7.operator = operator_5
+        quest_7.save()
+        operators_3 = get_operators_with_quests(
+            required_activity,
+            ["1_created", "2_processing", "3_sabotaged", "4_expired", "5_cancelled", "6_success"],
+            readiness=False,
+        )
+        quests_by_5 = set([quest.pk for quest in operators_3["5"].pop("quests")])
+        operators_3["5"]["quests"] = quests_by_5
+
+        self.assertEqual(
+            operators_3,
+            {
+                "5": {"object": operator_5, "quests": {quest_12.pk, quest_7.pk}},
+                "7": {"object": operator_7, "quests": []},
+                "8": {"object": operator_8, "quests": []},
+            },
+        )
+        self.assertEqual(
+            get_operators_with_quests(
+                activity=Activity.objects.get(name="Оператор ЧПУ"),
+                quest_statuses=["1_created", "2_processing", "3_sabotaged", "4_expired", "5_cancelled", "6_success"],
+            ),
+            dict(),
+        )
