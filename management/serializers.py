@@ -1,6 +1,7 @@
 from typing import Any
 
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 from rest_framework.fields import CurrentUserDefault
 
 from users.models import Employee
@@ -44,11 +45,15 @@ class QuestSerializer(serializers.ModelSerializer):
         for k, v in validated_data.items():
             setattr(instance, k, v)
         if "related_quest" in validated_data:
+            new_parent = validated_data["related_quest"]
+            if new_parent and new_parent.pk == instance.pk:
+                raise ValidationError("Задача не может быть задачей-родителем для самой себя")
             current_path = f"{instance.path_to_root}{instance.pk}/"
             childs = Quest.objects.filter(path_to_root__startswith=current_path)
-            new_parent = validated_data["related_quest"]
-            if new_parent is None:
+            if not new_parent:
                 instance.path_to_root = ""
+            elif new_parent in childs:
+                raise ValidationError(f"Попытка установить циклическую зависимость от задачи {new_parent.pk}")
             else:
                 instance.path_to_root = f"{new_parent.path_to_root}{new_parent.pk}/"
             new_path = f"{instance.path_to_root}{instance.pk}/"

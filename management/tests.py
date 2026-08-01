@@ -390,6 +390,18 @@ class QuestSpecialTestCase(APITestCase):
             dict(),
         )
 
+    def test_cyclic_dependence_exception(self) -> None:
+        """Исключение циклической зависимости при замене задачи-родителя"""
+
+        some_task = Quest.objects.get(title__startswith="Запустить")
+        response_1 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": some_task.pk})
+        response_2 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": 8})
+        response_3 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": ""})
+
+        self.assertEqual(response_1.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response_2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response_3.status_code, status.HTTP_200_OK)
+
 
 class QuestTransferResponsibilityCase(APITestCase):
     """Тест разделения ответственности за выполнение большой задачи сотрудниками с одинаковой должностью"""
