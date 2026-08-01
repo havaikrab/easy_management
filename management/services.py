@@ -28,13 +28,17 @@ def get_operators_with_quests(activity: Activity, quest_statuses: list, readines
     return operators
 
 
-# def operator_auto_setting(quest: Quest) -> None:
-#     """Назначает или переопределяет исполнителя задачи, если он не указан или имеет статус Не доступен"""
-#
-#     if quest.status in ["1_created", "2_processing", "3_sabotaged"]:
-#         operator = quest.operator
-#         activity = quest.required
-#         if not isinstance(operator, Employee or operator.readiness != "ready_to_work":
-#             pass
-#         elif quest.status == "3_sabotaged":
-#             pass
+def operator_auto_setting(quest: Quest) -> None:
+    """Назначает или переопределяет исполнителя задачи, если он не указан или имеет статус Не доступен"""
+
+    if quest.status in ["1_created", "2_processing", "3_sabotaged"]:
+        operator = quest.operator
+        activity = quest.required
+        if not isinstance(operator, Employee) or operator.readiness != "ready_to_work":
+            operators = get_operators_with_quests(activity, ["1_created", "2_processing"])
+            if len(operators) > 0:
+                sorted_operators = sorted(operators, key=lambda pk: len(operators[pk]["quests"]))
+                # if isinstance(quest.related_quest, Quest) and quest.related_quest.required == quest.required:
+
+        # elif quest.status == "3_sabotaged":
+        #     pass
