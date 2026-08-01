@@ -28,17 +28,30 @@ def get_operators_with_quests(activity: Activity, quest_statuses: list, readines
     return operators
 
 
-def operator_auto_setting(quest: Quest) -> None:
+def operator_auto_setting(quest: Quest) -> Quest:
     """Назначает или переопределяет исполнителя задачи, если он не указан или имеет статус Не доступен"""
 
     if quest.status in ["1_created", "2_processing", "3_sabotaged"]:
         operator = quest.operator
         activity = quest.required
         if not isinstance(operator, Employee) or operator.readiness != "ready_to_work":
-            operators = get_operators_with_quests(activity, ["1_created", "2_processing"])
-            if len(operators) > 0:
-                sorted_operators = sorted(operators, key=lambda pk: len(operators[pk]["quests"]))
-                # if isinstance(quest.related_quest, Quest) and quest.related_quest.required == quest.required:
-
-        # elif quest.status == "3_sabotaged":
-        #     pass
+            relevant_operators = get_operators_with_quests(activity, ["1_created", "2_processing"])
+            if len(relevant_operators) > 0:
+                less_busy = min(relevant_operators.values(), key=lambda pk: len(pk["quests"]))["object"]
+                if isinstance(quest.related_quest, Quest) and quest.related_quest.required == quest.required:
+                    for value in relevant_operators.values():
+                        if quest.related_quest in value["quests"]:
+                            related_quest_operator = value["object"]
+                            difference = len(value["quests"]) - len(relevant_operators[less_busy.pk]["quests"])
+                            if difference <= 2:
+                                quest.operator = related_quest_operator
+                                quest.report += f'\nСотрудник ID "{related_quest_operator.username}" автоматически назначен ответственным исполнителем'
+                                return quest
+                quest.operator = less_busy
+                quest.report += (
+                    f'\nСотрудник ID "{less_busy.username}" автоматически назначен ответственным исполнителем'
+                )
+            else:
+                quest.status = "3_sabotaged"
+                quest.report += "\nВыполнение задачи прервано. Исполнитель не может быть назначен автоматически"
+    return quest
