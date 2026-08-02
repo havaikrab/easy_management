@@ -52,7 +52,7 @@ class Quest(models.Model):
     status: models.CharField = models.CharField(
         max_length=12, choices=STATUS_CHOICES, verbose_name="Статус", default="1_created"
     )
-    report: models.TextField = models.TextField(blank=True, null=True, verbose_name="Отчет")
+    report: models.TextField = models.TextField(blank=True, default="", verbose_name="Отчет")
     path_to_root: models.TextField = models.TextField(verbose_name="Последовательность задач-родителей", db_index=True)
 
     class Meta:
