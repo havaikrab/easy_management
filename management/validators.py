@@ -41,3 +41,15 @@ def check_operator_readiness(quest_data: dict, quest: Optional[Quest] = None) ->
             raise ValidationError("Автоматизированные системы не могут назначаться в качестве исполнителя задачи")
         if expected_operator.readiness == "not_available":
             raise ValidationError('Сотрудник имеет статус "Не доступен" и не может быть назначен исполнителем')
+
+
+def related_quest_subordination_validator(quest_data: dict, user: Employee, quest: Optional[Quest] = None) -> None:
+    """Запрещает произвольное присвоение в качестве родительской той задачи,
+    у которой сотрудник не является исполнителем или создателем"""
+
+    current_related_quest = None
+    if isinstance(quest, Quest):
+        current_related_quest = quest.related_quest
+    related_quest = quest_data.get("related_quest", current_related_quest)
+    if related_quest and related_quest.creator != user and related_quest.operator != user:
+        raise ValidationError("Пользователь не имеет прямого отношения к родительской задаче")

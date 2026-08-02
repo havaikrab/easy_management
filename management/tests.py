@@ -225,8 +225,20 @@ class QuestTestCase(APITestCase):
             "description": task_9_updated.description,
             "related_quest": task_9_updated.related_quest,
         }
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        task_4.creator = self.user
+        task_4.save()
+        tricky_admin_response = self.client.patch(
+            "/quests/8/",
+            data={
+                "title": "Задача 4 перенаправлена в отдел кадров",
+                "description": "Директору некогда! Директор перенаправил заявку инженера в отдел кадров",
+                "related_quest": 4,
+            },
+        )
+
+        self.assertEqual(tricky_admin_response.status_code, status.HTTP_200_OK)
         self.assertEqual(
             (task_4_data, task_6_data, task_9_data), (task_4_data_updated, task_6_data_updated, task_9_data_updated)
         )
@@ -391,18 +403,6 @@ class QuestSpecialTestCase(APITestCase):
             dict(),
         )
 
-    def test_cyclic_dependence_exception(self) -> None:
-        """Исключение циклической зависимости при замене задачи-родителя"""
-
-        some_task = Quest.objects.get(title__startswith="Запустить")
-        response_1 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": some_task.pk})
-        response_2 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": 8})
-        response_3 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": ""})
-
-        self.assertEqual(response_1.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response_2.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response_3.status_code, status.HTTP_200_OK)
-
 
 class QuestTransferResponsibilityCase(APITestCase):
     """Тест разделения ответственности за выполнение большой задачи сотрудниками с одинаковой должностью"""
@@ -477,3 +477,16 @@ class QuestCommonEmployeeTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 3)
+
+    def test_cyclic_dependence_exception(self) -> None:
+        """Исключение циклической зависимости при замене задачи-родителя"""
+
+        some_task = Quest.objects.get(title__startswith="Запустить")
+        sub_task = Quest.objects.get(title__startswith="Выдать")
+        response_1 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": some_task.pk})
+        response_2 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": sub_task.pk})
+        response_3 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": ""})
+
+        self.assertEqual(response_1.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response_2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response_3.status_code, status.HTTP_200_OK)

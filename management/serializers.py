@@ -8,7 +8,11 @@ from users.models import Employee
 
 from .models import Activity, Quest
 from .services import operator_auto_setting
-from .validators import check_operator_readiness, dead_line_validator
+from .validators import (
+    check_operator_readiness,
+    dead_line_validator,
+    related_quest_subordination_validator,
+)
 
 
 class ActivitySerializer(serializers.ModelSerializer):
@@ -36,6 +40,8 @@ class QuestSerializer(serializers.ModelSerializer):
 
         dead_line_validator(attrs, quest=self.instance)
         check_operator_readiness(attrs, quest=self.instance)
+        user = self.context["request"].user
+        related_quest_subordination_validator(attrs, user, quest=self.instance)
         return super().validate(attrs)
 
     def update(self, instance: Quest, validated_data: dict) -> Quest:
@@ -95,6 +101,8 @@ class QuestCreatingSerializer(serializers.ModelSerializer):
 
         dead_line_validator(attrs)
         check_operator_readiness(attrs)
+        user = self.context["request"].user
+        related_quest_subordination_validator(attrs, user)
         return super().validate(attrs)
 
     def create(self, validated_data: dict) -> Quest:
