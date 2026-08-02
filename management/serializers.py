@@ -23,6 +23,7 @@ class ActivitySerializer(serializers.ModelSerializer):
 
         model = Activity
         fields = "__all__"
+        read_only_fields = ["partners"]
 
 
 class QuestSerializer(serializers.ModelSerializer):

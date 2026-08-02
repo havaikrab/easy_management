@@ -8,6 +8,7 @@ class Activity(models.Model):
 
     name: models.CharField = models.CharField(unique=True, max_length=100, verbose_name="Название должности")
     description: models.TextField = models.TextField(verbose_name="Описание должности")
+    partners: models.ManyToManyField = models.ManyToManyField("self", verbose_name="Контактирующие должности")
 
     class Meta:
         """Настройки отображения"""

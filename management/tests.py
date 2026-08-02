@@ -31,7 +31,9 @@ class ActivityTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(len(Activity.objects.all()), 13)
         response.data.pop("id")
-        self.assertEqual(response.data, {"name": "Медсестра", "description": "Дежурный медик на производстве"})
+        self.assertEqual(
+            response.data, {"name": "Медсестра", "description": "Дежурный медик на производстве", "partners": []}
+        )
 
     def test_activity_invalid_create(self) -> None:
         """Запрет создавать должности с одинаковыми названиями"""
@@ -54,10 +56,12 @@ class ActivityTestCase(APITestCase):
         """Отображение объекта должности"""
 
         response = self.client.get("/activities/5/")
+        response.data.pop("id")
+        partners = response.data.pop("partners")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        response.data.pop("id")
         self.assertEqual(response.data, {"name": "Инженер-наладчик", "description": "Царь-фиксик"})
+        self.assertEqual(set(partners), {1, 2, 3, 6, 8, 11, 12})
 
     def test_activity_update(self) -> None:
         """Изменение объекта должности"""
@@ -67,8 +71,10 @@ class ActivityTestCase(APITestCase):
             data={
                 "name": "Столяр-мебельщик",
                 "description": "Распиловщик листовых материалов с опытом работы не менее года",
+                "partners": [5, 6, 8, 9],
             },
         )
+        partners = response.data.pop("partners")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -79,6 +85,7 @@ class ActivityTestCase(APITestCase):
                 "description": "Распиловщик листовых материалов с опытом работы не менее года",
             },
         )
+        self.assertEqual(set(partners), {5, 6, 8, 9})
 
     def test_unused_activity_delete(self) -> None:
         """Удаление незанятой должности"""
