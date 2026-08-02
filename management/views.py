@@ -1,6 +1,7 @@
 from typing import cast
 
 from django.db.models import ProtectedError, Q, QuerySet
+from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.viewsets import ModelViewSet
 
@@ -53,8 +54,12 @@ class QuestViewSet(ModelViewSet):
         elif self.action == "list":
             self.serializer_class = QuestSimplifiedSerializer
         elif self.action in ["update", "partial_update"]:
-            user = self.request.user
             quest = self.get_object()
+            if quest.dead_line < timezone.now():
+                raise PermissionDenied(
+                    "Задача не может быть изменена, после истечения времени, отведенного на ее выполнение"
+                )
+            user = self.request.user
             if quest.creator == user:
                 self.serializer_class = QuestSerializer
             else:

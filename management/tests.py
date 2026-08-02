@@ -178,6 +178,7 @@ class QuestTestCase(APITestCase):
             },
         )
 
+    @freeze_time("2026-07-31T16:11:00.1Z")
     def test_quest_update_delete(self) -> None:
         """Изменение задачи и удаление подзадачи, неактуальной задачи"""
 
@@ -420,6 +421,18 @@ class QuestSpecialTestCase(APITestCase):
             dict(),
         )
 
+    def test_quest_update_time_out(self) -> None:
+        """Ограничение на изменение задачи после того, как время на ее выполнение закончилось"""
+
+        task = Quest.objects.get(title="Восстановить интернет")
+        response = self.client.patch(f"/quests/{task.pk}/", data={"status": "6_success", "report": "Восстановлено"})
+        updated_task = Quest.objects.get(title="Восстановить интернет")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual("Задача не может быть изменена, после истечения времени" in str(response.data), True)
+        self.assertEqual(task.status, updated_task.status)
+        self.assertEqual(task.report, updated_task.report)
+
 
 class QuestTransferResponsibilityCase(APITestCase):
     """Тест разделения ответственности за выполнение большой задачи сотрудниками с одинаковой должностью"""
@@ -487,6 +500,7 @@ class QuestCommonEmployeeTestCase(APITestCase):
         self.user = Employee.objects.get(username="7750OlOl3545")
         self.client.force_authenticate(user=self.user)
 
+    @freeze_time("2026-08-02T15:21:54.527Z")
     def test_common_employee_quests_getting(self) -> None:
         """Отображение обычному сотруднику только тех задач, в которых он является исполнителем или создателем"""
 
@@ -541,12 +555,14 @@ class QuestCommonEmployeeTestCase(APITestCase):
         response_1 = self.client.patch(f"/quests/{some_task.pk}/", data={"status": "6_success"})
         response_2 = self.client.patch(f"/quests/{sub_task.pk}/", data={"related_quest": cyclic_task.pk})
         response_3 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": ""})
+        response_4 = self.client.patch(f"/quests/{some_task.pk}/", data={"status": "5_cancelled"})
 
         self.assertEqual(response_1.status_code, status.HTTP_200_OK)
         self.assertEqual(some_task == some_task.related_quest, False)
         self.assertEqual(response_2.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual("Попытка установить циклическую зависимость" in str(response_2.data), True)
         self.assertEqual(response_3.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_4.status_code, status.HTTP_400_BAD_REQUEST)
 
         denied_delete = self.client.delete(f"/quests/{some_task.pk}/")
         failed_delete = self.client.delete(f"/quests/{sub_task.pk}/")

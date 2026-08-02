@@ -156,3 +156,11 @@ class QuestUpdateReportSerializer(serializers.ModelSerializer):
 
         model = Quest
         fields = ["status", "report"]
+
+    def validate(self, attrs: dict) -> Any:
+        """Ограничивает допустимые устанавливаемые значения статуса выполнения задачи"""
+
+        new_status = attrs.get("status", None)
+        if new_status and new_status not in ["1_created", "2_processing", "3_sabotaged", "6_success"]:
+            raise ValidationError("Исполнитель не может объявить задачу отмененной или просроченной")
+        return super().validate(attrs)
