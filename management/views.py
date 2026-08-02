@@ -1,6 +1,10 @@
-from django.db.models import ProtectedError
+from typing import cast
+
+from django.db.models import ProtectedError, Q, QuerySet
 from rest_framework.exceptions import ValidationError
 from rest_framework.viewsets import ModelViewSet
+
+from users.models import Employee
 
 from .models import Activity, Quest
 from .serializers import ActivitySerializer, QuestCreatingSerializer, QuestSerializer
@@ -25,6 +29,14 @@ class QuestViewSet(ModelViewSet):
     """Вьюсет для модели задачи"""
 
     queryset = Quest.objects.all()
+
+    def get_queryset(self) -> QuerySet:
+        """Ограничение набора отображаемых задач"""
+
+        user = cast(Employee, self.request.user)
+        if user.is_superuser:
+            return Quest.objects.all()
+        return Quest.objects.filter(Q(operator=user) | Q(creator=user))
 
     def get_serializer_class(self) -> type:
         """Определяет класс сериализатора в зависимости от

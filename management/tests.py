@@ -285,6 +285,7 @@ class QuestSpecialTestCase(APITestCase):
             True,
         )
 
+    @freeze_time("2026-07-31T19:45:00.0Z")
     def test_checking_operator_readiness(self) -> None:
         """Проверка соответствия назначаемого сотрудника требованиям задачи"""
 
@@ -456,3 +457,23 @@ class QuestTransferResponsibilityCase(APITestCase):
 
         self.assertEqual(sabotaged_response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(new_task.status, "3_sabotaged")
+
+
+class QuestCommonEmployeeTestCase(APITestCase):
+    """Тесты запросов обычных пользователей, связанных с моделью Quest"""
+
+    fixtures = ["activities_fixture.json", "employees_fixture.json", "quests_fixture.json"]
+
+    def setUp(self) -> None:
+        """Предварительная авторизация пользователя"""
+
+        self.user = Employee.objects.get(username="7750OlOl3545")
+        self.client.force_authenticate(user=self.user)
+
+    def test_common_employee_quests_getting(self) -> None:
+        """Отображение обычному сотруднику только тех задач, в которых он является исполнителем или создателем"""
+
+        response = self.client.get("/quests/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 3)
