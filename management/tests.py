@@ -13,7 +13,7 @@ from .services import get_operators_with_quests
 class ActivityTestCase(APITestCase):
     """Группа тестов для модели Activity"""
 
-    fixtures = ["activities_fixture.json", "employees_fixture.json"]
+    fixtures = ["activities_fixture.json", "employees_fixture.json", "permissions_fixture.json"]
 
     def setUp(self) -> None:
         """Предварительная авторизация пользователя"""
@@ -90,11 +90,19 @@ class ActivityTestCase(APITestCase):
     def test_unused_activity_delete(self) -> None:
         """Удаление незанятой должности"""
 
+        partner = Activity.objects.get(name__startswith="Менеджер")
+        partners_ids = set([employee.pk for employee in partner.partners.all()])
+
         self.assertEqual(len(Activity.objects.all()), 12)
+        self.assertEqual(partners_ids, {1, 2, 3, 4, 6, 7, 8, 10, 11, 12})
+
         response = self.client.delete("/activities/7/")
+        updated_partner = Activity.objects.get(name__startswith="Менеджер")
+        updated_partners_ids = set([employee.pk for employee in updated_partner.partners.all()])
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(len(Activity.objects.all()), 11)
+        self.assertEqual(updated_partners_ids, {1, 2, 3, 4, 6, 8, 10, 11, 12})
 
     def test_used_activity_fail_delete(self) -> None:
         """Попытка удаления занятой должности"""

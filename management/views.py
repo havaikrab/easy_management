@@ -1,13 +1,15 @@
-from typing import cast
+from typing import Sequence, cast
 
 from django.db.models import ProtectedError, Q, QuerySet
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ModelViewSet
 
 from users.models import Employee
 
 from .models import Activity, Quest
+from .permissions import IsActivityConstructor, IsActivityUser
 from .serializers import (
     ActivitySerializer,
     QuestCreatingSerializer,
@@ -22,6 +24,15 @@ class ActivityViewSet(ModelViewSet):
 
     queryset = Activity.objects.all()
     serializer_class = ActivitySerializer
+
+    def get_permissions(self) -> Sequence:
+        """Ограничение прав использования контроллера"""
+
+        if self.action in ["list", "retrieve"]:
+            self.permission_classes = [IsAuthenticated, IsActivityUser]
+        else:
+            self.permission_classes = [IsAuthenticated, IsActivityConstructor]
+        return super().get_permissions()
 
     def perform_destroy(self, instance: Activity) -> None:
         """Проверка на наличие имеющихся связанных объектов других моделей"""
