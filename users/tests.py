@@ -12,7 +12,7 @@ class EmployeeTestCase(APITestCase):
     def setUp(self) -> None:
         """Предварительная авторизация пользователя"""
 
-        self.user = Employee.objects.get(username="7748IrIrde5b")
+        self.user = Employee.objects.get(username="8024IvIvc0e0")
         self.client.force_authenticate(user=self.user)
 
     def test_employee_create(self) -> None:
@@ -53,7 +53,7 @@ class EmployeeTestCase(APITestCase):
         response = self.client.get("/users/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 11)
+        self.assertEqual(len(response.data), 12)
 
     def test_getting_employee_detail(self) -> None:
         """Просмотр информации о сотруднике"""
@@ -131,3 +131,23 @@ class EmployeeTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual("7750OlOl3545 --> 7950OlOli2bA --> 7750OlOl3545" in str(response.data), True)
+
+
+class EmployeeSpecialTestCase(APITestCase):
+    """Группа специфичных тестов для модели Employee"""
+
+    fixtures = ["activities_fixture.json", "employees_fixture.json"]
+
+    def setUp(self) -> None:
+        """Предварительная авторизация пользователя"""
+
+        self.user = Employee.objects.get(username="8068DaDa0b6d")
+        self.client.force_authenticate(user=self.user)
+
+    def test_getting_employees_list_by_common_user(self) -> None:
+        """Отображение списка коллег пользователю, не имеющему специальных прав"""
+
+        response = self.client.get("/users/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 7)
