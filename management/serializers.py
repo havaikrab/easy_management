@@ -33,7 +33,7 @@ class QuestSerializer(serializers.ModelSerializer):
 
         model = Quest
         fields = "__all__"
-        read_only_fields = ["id", "path_to_root"]
+        read_only_fields = ["id", "path_to_root", "status", "report"]
 
     def validate(self, attrs: dict) -> Any:
         """Комплексная валидация параметров обновляемой задачи"""
@@ -143,6 +143,16 @@ class QuestSimplifiedSerializer(serializers.ModelSerializer):
         return "Исполнитель не назначен"
 
     def get_required_activity(self, quest: Quest) -> str:
-        """Определяет значение для поля required"""
+        """Определяет значение для поля required_activity"""
 
         return str(quest.required.name)
+
+
+class QuestUpdateReportSerializer(serializers.ModelSerializer):
+    """Сериализатор отчета о стадии выполнения задачи"""
+
+    class Meta:
+        """Параметры сериализатора"""
+
+        model = Quest
+        fields = ["status", "report"]

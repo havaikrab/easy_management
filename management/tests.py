@@ -184,7 +184,6 @@ class QuestTestCase(APITestCase):
         self.assertEqual(len(Quest.objects.all()), 11)
 
         failed_delete = self.client.delete("/quests/6/")
-
         self.assertEqual(failed_delete.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(len(Quest.objects.all()), 11)
 
@@ -194,11 +193,25 @@ class QuestTestCase(APITestCase):
         task_6_data = {"title": task_6.title, "description": task_6.description, "related_quest": task_6.related_quest}
         task_9 = Quest.objects.get(title__startswith="Восстановить")
         task_9_data = {"title": task_9.title, "description": task_9.description, "related_quest": task_9.related_quest}
-        task_8_path = Quest.objects.get(title__startswith="Нужен").path_to_root
+        task_8 = Quest.objects.get(title__startswith="Нужен")
+        task_8_path = task_8.path_to_root
         task_9_path = task_9.path_to_root
 
         self.assertEqual((task_8_path, task_9_path), ("4/6/", "4/6/8/"))
 
+        denied_response = self.client.patch(
+            "/quests/8/",
+            data={
+                "title": "Задача 4 перенаправлена в отдел кадров",
+                "description": "Директору некогда! Директор перенаправил заявку инженера в отдел кадров",
+                "related_quest": 4,
+            },
+        )
+
+        self.assertEqual(denied_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        task_8.creator = self.user
+        task_8.save()
         response = self.client.patch(
             "/quests/8/",
             data={
@@ -207,6 +220,7 @@ class QuestTestCase(APITestCase):
                 "related_quest": 4,
             },
         )
+
         task_4_updated = Quest.objects.get(title__startswith="Запустить")
         task_4_data_updated = {
             "title": task_4_updated.title,
@@ -225,6 +239,7 @@ class QuestTestCase(APITestCase):
             "description": task_9_updated.description,
             "related_quest": task_9_updated.related_quest,
         }
+
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
         task_4.creator = self.user
@@ -251,6 +266,8 @@ class QuestTestCase(APITestCase):
             updated_task_8.description, "Директору некогда! Директор перенаправил заявку инженера в отдел кадров"
         )
 
+        task_6.creator = self.user
+        task_6.save()
         success_delete = self.client.delete("/quests/6/")
 
         self.assertEqual(success_delete.status_code, status.HTTP_204_NO_CONTENT)
@@ -289,11 +306,11 @@ class QuestSpecialTestCase(APITestCase):
         quest_data["dead_line"] = "2030-07-31T15:35:00.112233+07:00"
         response_2 = self.client.patch("/quests/6/", data=quest_data)
 
-        self.assertEqual(response_2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response_2.status_code, status.HTTP_403_FORBIDDEN)
+
         self.assertEqual(len(Quest.objects.all()), 11)
         self.assertEqual(
-            "Срок выполнения текущей задачи не должен превышать срок выполнения зависимой от нее задачи"
-            in str(response_2.data),
+            "Для изменения объекта задачи нужно быть ее создателем или исполнителем" in str(response_2.data),
             True,
         )
 
@@ -508,11 +525,35 @@ class QuestCommonEmployeeTestCase(APITestCase):
         """Исключение циклической зависимости при замене задачи-родителя"""
 
         some_task = Quest.objects.get(title__startswith="Запустить")
-        sub_task = Quest.objects.get(title__startswith="Выдать")
-        response_1 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": some_task.pk})
-        response_2 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": sub_task.pk})
+        sub_task = Quest.objects.get(title__startswith="Нанять")
+        sub_task.creator = self.user
+        sub_task.save()
+        cyclic_task = Quest.objects.create(
+            title="Починить интернет",
+            description="Сисадмин недоступен, товарищ инженер, выручайте",
+            creator=Employee.objects.get(username="7748IrIrde5b"),
+            related_quest=Quest.objects.get(title="Нужен еще один инженер"),
+            dead_line="2026-07-31T16:11:10.1Z",
+            required=Activity.objects.get(name="Инженер-наладчик"),
+            operator=self.user,
+            path_to_root="4/6/8/",
+        )
+        response_1 = self.client.patch(f"/quests/{some_task.pk}/", data={"status": "6_success"})
+        response_2 = self.client.patch(f"/quests/{sub_task.pk}/", data={"related_quest": cyclic_task.pk})
         response_3 = self.client.patch(f"/quests/{some_task.pk}/", data={"related_quest": ""})
 
-        self.assertEqual(response_1.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response_1.status_code, status.HTTP_200_OK)
+        self.assertEqual(some_task == some_task.related_quest, False)
         self.assertEqual(response_2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual("Попытка установить циклическую зависимость" in str(response_2.data), True)
         self.assertEqual(response_3.status_code, status.HTTP_200_OK)
+
+        denied_delete = self.client.delete(f"/quests/{some_task.pk}/")
+        failed_delete = self.client.delete(f"/quests/{sub_task.pk}/")
+
+        self.assertEqual(denied_delete.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            "Удалять задачи может только суперпользователь или их создатель" in str(denied_delete.data), True
+        )
+        self.assertEqual(failed_delete.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual("Удаление задачи запрещено, пока она имеет связанные подзадачи" in failed_delete.data, True)

@@ -1,7 +1,7 @@
 from typing import cast
 
 from django.db.models import ProtectedError, Q, QuerySet
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.viewsets import ModelViewSet
 
 from users.models import Employee
@@ -12,6 +12,7 @@ from .serializers import (
     QuestCreatingSerializer,
     QuestSerializer,
     QuestSimplifiedSerializer,
+    QuestUpdateReportSerializer,
 )
 
 
@@ -51,6 +52,16 @@ class QuestViewSet(ModelViewSet):
             self.serializer_class = QuestCreatingSerializer
         elif self.action == "list":
             self.serializer_class = QuestSimplifiedSerializer
+        elif self.action in ["update", "partial_update"]:
+            user = self.request.user
+            quest = self.get_object()
+            if quest.creator == user:
+                self.serializer_class = QuestSerializer
+            else:
+                if quest.operator == user:
+                    self.serializer_class = QuestUpdateReportSerializer
+                else:
+                    raise PermissionDenied("Для изменения объекта задачи нужно быть ее создателем или исполнителем")
         else:
             self.serializer_class = QuestSerializer
         return self.serializer_class
@@ -58,6 +69,10 @@ class QuestViewSet(ModelViewSet):
     def perform_destroy(self, instance: Quest) -> None:
         """Исключает возможность удаления задачи, имеющей подзадачи"""
 
+        quest = self.get_object()
+        user = cast(Employee, self.request.user)
+        if not user.is_superuser and quest.creator != user:
+            raise PermissionDenied("Удалять задачи может только суперпользователь или их создатель")
         try:
             instance.delete()
         except ProtectedError:
