@@ -118,3 +118,31 @@ class QuestCreatingSerializer(serializers.ModelSerializer):
             quest = operator_auto_setting(quest)
         quest.save()
         return quest
+
+
+class QuestSimplifiedSerializer(serializers.ModelSerializer):
+    """Упрощенный сериализатор для отображения списка задач"""
+
+    operator = serializers.SerializerMethodField()
+    required_activity = serializers.SerializerMethodField()
+
+    class Meta:
+        """Параметры сериализатора"""
+
+        model = Quest
+        fields = ["title", "operator", "required_activity", "dead_line", "status"]
+
+    def get_operator(self, quest: Quest) -> str:
+        """Определяет значение для поля operator"""
+
+        if isinstance(quest.operator, Employee):
+            operator = f"{quest.operator.last_name} {quest.operator.first_name}"
+            if quest.operator.father_name:
+                operator += f" {quest.operator.father_name}"
+            return operator
+        return "Исполнитель не назначен"
+
+    def get_required_activity(self, quest: Quest) -> str:
+        """Определяет значение для поля required"""
+
+        return str(quest.required.name)

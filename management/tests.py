@@ -477,6 +477,32 @@ class QuestCommonEmployeeTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 3)
+        self.assertEqual(
+            response.data,
+            [
+                {
+                    "title": "Запустить производство",
+                    "operator": "Олегов Олег Олегович",
+                    "required_activity": "Инженер-наладчик",
+                    "dead_line": "2026-09-01T06:59:59.999000+07:00",
+                    "status": "2_processing",
+                },
+                {
+                    "title": "Выдать комплектующие",
+                    "operator": "Галинина Галина Галиновна",
+                    "required_activity": "Кладовщик",
+                    "dead_line": "2026-07-31T22:00:00+07:00",
+                    "status": "6_success",
+                },
+                {
+                    "title": "Подготовить место для сборки оборудования",
+                    "operator": "Данилов Данил Данилович",
+                    "required_activity": "Слесарь",
+                    "dead_line": "2026-08-01T03:00:00+07:00",
+                    "status": "6_success",
+                },
+            ],
+        )
 
     def test_cyclic_dependence_exception(self) -> None:
         """Исключение циклической зависимости при замене задачи-родителя"""

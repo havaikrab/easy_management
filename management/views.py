@@ -7,7 +7,12 @@ from rest_framework.viewsets import ModelViewSet
 from users.models import Employee
 
 from .models import Activity, Quest
-from .serializers import ActivitySerializer, QuestCreatingSerializer, QuestSerializer
+from .serializers import (
+    ActivitySerializer,
+    QuestCreatingSerializer,
+    QuestSerializer,
+    QuestSimplifiedSerializer,
+)
 
 
 class ActivityViewSet(ModelViewSet):
@@ -44,6 +49,8 @@ class QuestViewSet(ModelViewSet):
 
         if self.action == "create":
             self.serializer_class = QuestCreatingSerializer
+        elif self.action == "list":
+            self.serializer_class = QuestSimplifiedSerializer
         else:
             self.serializer_class = QuestSerializer
         return self.serializer_class
