@@ -112,6 +112,54 @@ class ActivityTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_activity_relations_addition(self) -> None:
+        """Добавление связи между двумя должностями"""
+
+        activity_1 = Activity.objects.get(name="Генеральный директор")
+        activity_3 = self.user.activity
+        activity_12 = Activity.objects.get(name="Столяр")
+
+        self.assertEqual(len(activity_3.partners.all()), 5)
+
+        bad_response = self.client.post(f"/activities/{activity_3.pk}/partners/{activity_1.pk}/")
+
+        self.assertEqual(bad_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(bad_response.data, {"error": "Связь между должностями уже существует"})
+        self.assertEqual(len(self.user.activity.partners.all()), 5)
+
+        success_response = self.client.post(f"/activities/{activity_3.pk}/partners/{activity_12.pk}/")
+
+        self.assertEqual(success_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            success_response.data,
+            {"message": "Установлена связь между должностями Начальник отдела кадров и Столяр."},
+        )
+        self.assertEqual(len(self.user.activity.partners.all()), 6)
+
+    def test_activity_relations_remove(self) -> None:
+        """Ограничение связи между двумя должностями"""
+
+        activity_1 = Activity.objects.get(name="Генеральный директор")
+        activity_3 = self.user.activity
+        activity_12 = Activity.objects.get(name="Столяр")
+
+        self.assertEqual(len(activity_3.partners.all()), 5)
+
+        bad_response = self.client.delete(f"/activities/{activity_3.pk}/partners/{activity_12.pk}/")
+
+        self.assertEqual(bad_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(bad_response.data, {"error": "Связь между должностями не существует"})
+        self.assertEqual(len(self.user.activity.partners.all()), 5)
+
+        success_response = self.client.delete(f"/activities/{activity_3.pk}/partners/{activity_1.pk}/")
+
+        self.assertEqual(success_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            success_response.data,
+            {"message": "Связь между должностями Начальник отдела кадров и Генеральный директор исключена."},
+        )
+        self.assertEqual(len(self.user.activity.partners.all()), 4)
+
 
 class QuestTestCase(APITestCase):
     """Группа тестов для модели Quest"""
