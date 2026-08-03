@@ -45,7 +45,7 @@ def operator_auto_setting(quest: Quest) -> Quest:
                             difference = len(value["quests"]) - len(relevant_operators[str(less_busy.pk)]["quests"])
                             if difference <= 2:
                                 quest.operator = related_quest_operator
-                                quest.report += f'\nСотрудник ID "{related_quest_operator.username}" автоматически назначен ответственным исполнителем'
+                                quest.report += f'\nСотрудник ID "{related_quest_operator.username}" автоматически назначен ответственным исполнителем'  # noqa
                                 return quest
                 quest.operator = less_busy
                 quest.report += (
@@ -55,3 +55,10 @@ def operator_auto_setting(quest: Quest) -> Quest:
                 quest.status = "3_sabotaged"
                 quest.report += "\nВыполнение задачи прервано. Исполнитель не может быть назначен автоматически"
     return quest
+
+
+def set_activity_relation(patron: Activity, arrived: Activity) -> None:
+    """Создает отношения между должностями"""
+
+    if not patron.partners.filter(pk=arrived.pk).exists():
+        patron.partners.add(arrived)

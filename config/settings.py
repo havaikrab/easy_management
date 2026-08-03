@@ -12,6 +12,14 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
+CREATE_SUPER_ADMIN = os.getenv("CREATE_SUPER_ADMIN", "False").lower() == "true"
+SUPER_ADMIN_ACTIVITY = os.getenv("SUPER_ADMIN_ACTIVITY")
+SUPER_ADMIN_NAME = os.getenv("SUPER_ADMIN_NAME")
+SUPER_LAST_NAME = os.getenv("SUPER_LAST_NAME")
+SUPER_FIRST_NAME = os.getenv("SUPER_FIRST_NAME")
+SUPER_FATHER_NAME = os.getenv("SUPER_FATHER_NAME")
+SUPER_PASSWORD = os.getenv("SUPER_PASSWORD")
+
 ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [

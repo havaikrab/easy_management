@@ -8,11 +8,7 @@ from users.models import Employee
 
 from .models import Activity, Quest
 from .services import operator_auto_setting
-from .validators import (
-    check_operator_readiness,
-    dead_line_validator,
-    related_quest_subordination_validator,
-)
+from .validators import check_operator_readiness, dead_line_validator, related_quest_subordination_validator
 
 
 class ActivitySerializer(serializers.ModelSerializer):
@@ -23,6 +19,7 @@ class ActivitySerializer(serializers.ModelSerializer):
 
         model = Activity
         fields = "__all__"
+        read_only_fields = ["partners"]
 
 
 class QuestSerializer(serializers.ModelSerializer):

@@ -21,7 +21,7 @@ class Employee(AbstractUser):
         ("automated", "Автоматизированный терминал"),
     ]
     readiness: models.CharField = models.CharField(
-        max_length=13, choices=STATUS_CHOICES, verbose_name="Готовность к работе", default="not_available"
+        max_length=13, choices=STATUS_CHOICES, verbose_name="Готовность к работе", default="ready_to_work"
     )
 
     class Meta:

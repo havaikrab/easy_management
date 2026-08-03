@@ -13,7 +13,7 @@ from .services import get_operators_with_quests
 class ActivityTestCase(APITestCase):
     """Группа тестов для модели Activity"""
 
-    fixtures = ["activities_fixture.json", "employees_fixture.json"]
+    fixtures = ["activities_fixture.json", "employees_fixture.json", "permissions_fixture.json"]
 
     def setUp(self) -> None:
         """Предварительная авторизация пользователя"""
@@ -31,7 +31,9 @@ class ActivityTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(len(Activity.objects.all()), 13)
         response.data.pop("id")
-        self.assertEqual(response.data, {"name": "Медсестра", "description": "Дежурный медик на производстве"})
+        self.assertEqual(
+            response.data, {"name": "Медсестра", "description": "Дежурный медик на производстве", "partners": []}
+        )
 
     def test_activity_invalid_create(self) -> None:
         """Запрет создавать должности с одинаковыми названиями"""
@@ -54,10 +56,12 @@ class ActivityTestCase(APITestCase):
         """Отображение объекта должности"""
 
         response = self.client.get("/activities/5/")
+        response.data.pop("id")
+        partners = response.data.pop("partners")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        response.data.pop("id")
         self.assertEqual(response.data, {"name": "Инженер-наладчик", "description": "Царь-фиксик"})
+        self.assertEqual(set(partners), {1, 2, 3, 6, 8, 11, 12})
 
     def test_activity_update(self) -> None:
         """Изменение объекта должности"""
@@ -67,8 +71,10 @@ class ActivityTestCase(APITestCase):
             data={
                 "name": "Столяр-мебельщик",
                 "description": "Распиловщик листовых материалов с опытом работы не менее года",
+                "partners": [5, 6, 8, 9],
             },
         )
+        partners = response.data.pop("partners")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -79,15 +85,24 @@ class ActivityTestCase(APITestCase):
                 "description": "Распиловщик листовых материалов с опытом работы не менее года",
             },
         )
+        self.assertEqual(set(partners), {5, 6, 8, 9})
 
     def test_unused_activity_delete(self) -> None:
         """Удаление незанятой должности"""
 
+        partner = Activity.objects.get(name__startswith="Менеджер")
+        partners_ids = set([employee.pk for employee in partner.partners.all()])
+
         self.assertEqual(len(Activity.objects.all()), 12)
+        self.assertEqual(partners_ids, {1, 2, 3, 4, 6, 7, 8, 10, 11, 12})
+
         response = self.client.delete("/activities/7/")
+        updated_partner = Activity.objects.get(name__startswith="Менеджер")
+        updated_partners_ids = set([employee.pk for employee in updated_partner.partners.all()])
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(len(Activity.objects.all()), 11)
+        self.assertEqual(updated_partners_ids, {1, 2, 3, 4, 6, 8, 10, 11, 12})
 
     def test_used_activity_fail_delete(self) -> None:
         """Попытка удаления занятой должности"""
@@ -96,6 +111,54 @@ class ActivityTestCase(APITestCase):
         response = self.client.delete("/activities/2/")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_activity_relations_addition(self) -> None:
+        """Добавление связи между двумя должностями"""
+
+        activity_1 = Activity.objects.get(name="Генеральный директор")
+        activity_3 = self.user.activity
+        activity_12 = Activity.objects.get(name="Столяр")
+
+        self.assertEqual(len(activity_3.partners.all()), 5)
+
+        bad_response = self.client.post(f"/activities/{activity_3.pk}/partners/{activity_1.pk}/")
+
+        self.assertEqual(bad_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(bad_response.data, {"error": "Связь между должностями уже существует"})
+        self.assertEqual(len(self.user.activity.partners.all()), 5)
+
+        success_response = self.client.post(f"/activities/{activity_3.pk}/partners/{activity_12.pk}/")
+
+        self.assertEqual(success_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            success_response.data,
+            {"message": "Установлена связь между должностями Начальник отдела кадров и Столяр."},
+        )
+        self.assertEqual(len(self.user.activity.partners.all()), 6)
+
+    def test_activity_relations_remove(self) -> None:
+        """Ограничение связи между двумя должностями"""
+
+        activity_1 = Activity.objects.get(name="Генеральный директор")
+        activity_3 = self.user.activity
+        activity_12 = Activity.objects.get(name="Столяр")
+
+        self.assertEqual(len(activity_3.partners.all()), 5)
+
+        bad_response = self.client.delete(f"/activities/{activity_3.pk}/partners/{activity_12.pk}/")
+
+        self.assertEqual(bad_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(bad_response.data, {"error": "Связь между должностями не существует"})
+        self.assertEqual(len(self.user.activity.partners.all()), 5)
+
+        success_response = self.client.delete(f"/activities/{activity_3.pk}/partners/{activity_1.pk}/")
+
+        self.assertEqual(success_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            success_response.data,
+            {"message": "Связь между должностями Начальник отдела кадров и Генеральный директор исключена."},
+        )
+        self.assertEqual(len(self.user.activity.partners.all()), 4)
 
 
 class QuestTestCase(APITestCase):

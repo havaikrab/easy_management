@@ -1,13 +1,20 @@
-from typing import cast
+from typing import Any, Sequence, cast
 
 from django.db.models import ProtectedError, Q, QuerySet
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
 from users.models import Employee
 
 from .models import Activity, Quest
+from .permissions import IsActivityConstructor, IsActivityUser
 from .serializers import (
     ActivitySerializer,
     QuestCreatingSerializer,
@@ -22,6 +29,15 @@ class ActivityViewSet(ModelViewSet):
 
     queryset = Activity.objects.all()
     serializer_class = ActivitySerializer
+
+    def get_permissions(self) -> Sequence:
+        """Ограничение прав использования контроллера"""
+
+        if self.action in ["list", "retrieve"]:
+            self.permission_classes = [IsAuthenticated, IsActivityUser]
+        else:
+            self.permission_classes = [IsAuthenticated, IsActivityConstructor]
+        return super().get_permissions()
 
     def perform_destroy(self, instance: Activity) -> None:
         """Проверка на наличие имеющихся связанных объектов других моделей"""
@@ -82,3 +98,29 @@ class QuestViewSet(ModelViewSet):
             instance.delete()
         except ProtectedError:
             raise ValidationError("Удаление задачи запрещено, пока она имеет связанные подзадачи")
+
+
+class ManageActivityRelationsView(APIView):
+    """Контроллер управления связями между должностями"""
+
+    permission_classes = [IsAuthenticated, IsActivityConstructor]
+
+    def post(self, request: Request, activity_pk: int, partner_pk: int, *args: Any, **kwargs: Any) -> Response:
+        """Устанавливает взаимосвязь между двумя должностями"""
+
+        activity = get_object_or_404(Activity, pk=activity_pk)
+        partner = get_object_or_404(Activity, pk=partner_pk)
+        if activity.partners.filter(pk=partner_pk).exists():
+            return Response({"error": "Связь между должностями уже существует"}, status=status.HTTP_400_BAD_REQUEST)
+        activity.partners.add(partner)
+        return Response({"message": f"Установлена связь между должностями {activity.name} и {partner.name}."})
+
+    def delete(self, request: Request, activity_pk: int, partner_pk: int, *args: Any, **kwargs: Any) -> Response:
+        """Ограничивает взаимосвязь между двумя должностями"""
+
+        activity = get_object_or_404(Activity, pk=activity_pk)
+        partner = get_object_or_404(Activity, pk=partner_pk)
+        if not activity.partners.filter(pk=partner_pk).exists():
+            return Response({"error": "Связь между должностями не существует"}, status=status.HTTP_400_BAD_REQUEST)
+        activity.partners.remove(partner)
+        return Response({"message": f"Связь между должностями {activity.name} и {partner.name} исключена."})

@@ -3,6 +3,9 @@ from typing import Any, cast
 from django.db import IntegrityError
 from rest_framework import serializers
 
+from management.models import Activity
+from management.services import set_activity_relation
+
 from .models import Employee
 from .services import generate_username
 
@@ -42,6 +45,10 @@ class EmployeeRegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data: dict) -> Employee:
         """Создание объекта пользователя с хешированием пароля"""
 
+        manager = validated_data.get("manager")
+        new_employee_activity = validated_data.get("activity")
+        if isinstance(manager, Employee) and isinstance(new_employee_activity, Activity):
+            set_activity_relation(manager.activity, new_employee_activity)
         password = validated_data.pop("password")
         while True:
             try:
