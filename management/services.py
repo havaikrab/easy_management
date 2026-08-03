@@ -1,6 +1,8 @@
 import logging
 from typing import Any
 
+from django.db.models import QuerySet
+
 from management.models import Activity, Quest
 from users.models import Employee
 
@@ -62,3 +64,37 @@ def set_activity_relation(patron: Activity, arrived: Activity) -> None:
 
     if not patron.partners.filter(pk=arrived.pk).exists():
         patron.partners.add(arrived)
+
+
+def get_quest_child_tree(quest: Quest, queryset: QuerySet) -> dict:
+    """Возвращает словарь с характеристикой задачи и структурой ее подзадач"""
+
+    path_with_parent = f"{quest.path_to_root}{quest.pk}/"
+    return {
+        "quest": {
+            "title": quest.title,
+            "description": quest.description,
+            "creator": f"{quest.creator.activity.name}: {quest.creator.last_name} {quest.creator.first_name}",
+            "operator": f"{quest.operator.activity.name}: {quest.operator.last_name} {quest.operator.first_name}",
+            "created_at": str(quest.created_at),
+            "dead_line": str(quest.dead_line),
+            "status": quest.status,
+            "report": quest.report,
+            "path_to_root": quest.path_to_root,
+        },
+        "sub_quests": {
+            str(sub.pk): get_quest_child_tree(
+                sub, queryset.filter(path_to_root__startswith=f"{path_with_parent}{sub.pk}/")
+            )
+            for sub in queryset.filter(related_quest__pk=quest.pk)
+        },
+    }
+
+
+def get_sub_quests_map(quest: Quest) -> dict:
+    """Получает из базы данных все подзадачи указанной задачи,
+    возвращает подробную карту зависимостей этих задач"""
+
+    path_with_parent = f"{quest.path_to_root}{quest.pk}/"
+    queryset = Quest.objects.filter(path_to_root__startswith=path_with_parent)
+    return get_quest_child_tree(quest, queryset)

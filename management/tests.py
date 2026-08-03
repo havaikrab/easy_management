@@ -7,7 +7,7 @@ from rest_framework.test import APITestCase
 from users.models import Employee
 
 from .models import Activity, Quest
-from .services import get_operators_with_quests
+from .services import get_operators_with_quests, get_sub_quests_map
 
 
 class ActivityTestCase(APITestCase):
@@ -614,3 +614,39 @@ class QuestCommonEmployeeTestCase(APITestCase):
         )
         self.assertEqual(failed_delete.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual("Удаление задачи запрещено, пока она имеет связанные подзадачи" in failed_delete.data, True)
+
+
+class QuestTreeTest(APITestCase):
+    """Тестирование функции, возвращающей "дерево-зависимостей" задач"""
+
+    fixtures = ["activities_fixture.json", "employees_fixture.json", "quests_fixture.json"]
+
+    def setUp(self) -> None:
+        """Предварительная авторизация пользователя"""
+
+        self.user = Employee.objects.get(username="8024IvIvc0e0")
+        self.client.force_authenticate(user=self.user)
+
+    def test_quest_dependencies_tree(self) -> None:
+        """Получение дерева зависимостей задач"""
+
+        quest = Quest.objects.get(title__startswith="Запустить")
+        tree = get_sub_quests_map(quest)
+        task_5 = Quest.objects.get(title__startswith="Выдать")
+        task_6 = Quest.objects.get(title__startswith="Нанять")
+        task_7 = Quest.objects.get(title__startswith="Подготовить")
+        task_8 = Quest.objects.get(title__startswith="Нужен")
+        task_9 = Quest.objects.get(title__startswith="Восстановить")
+
+        self.assertEqual(set(tree["sub_quests"].keys()), {str(task_5.pk), str(task_6.pk), str(task_7.pk)})
+        self.assertEqual(set(tree["sub_quests"][str(task_6.pk)]["sub_quests"].keys()), {str(task_8.pk)})
+        self.assertEqual(
+            set(tree["sub_quests"][str(task_6.pk)]["sub_quests"][str(task_8.pk)]["sub_quests"].keys()),
+            {str(task_9.pk)},
+        )
+        self.assertEqual(
+            tree["sub_quests"][str(task_6.pk)]["sub_quests"][str(task_8.pk)]["sub_quests"][str(task_9.pk)][
+                "sub_quests"
+            ],
+            dict(),
+        )
