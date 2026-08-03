@@ -1,6 +1,8 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from management.models import Activity
+
 from .models import Employee
 
 
@@ -18,21 +20,29 @@ class EmployeeTestCase(APITestCase):
     def test_employee_create(self) -> None:
         """Устройство нового сотрудника в организацию"""
 
-        self.assertEqual(len(Employee.objects.all()), 12)
+        activity = Activity.objects.get(name="Бухгалтер")
+        activity_relations_count = len(activity.partners.all())
         new_employee_data = {
             "last_name": "Аннова",
             "first_name": "Анна",
             "father_name": "Анновна",
             "activity": 4,
-            "manager": 2,
+            "manager": 1,
             "password": "hard_to_remember",
             "password_confirm": "hard_to_remember",
         }
+
+        self.assertEqual(len(Employee.objects.all()), 12)
+        self.assertEqual(activity_relations_count, 4)
+
         response = self.client.post("/users/", new_employee_data)
+        username = response.data.pop("username")
+        updated_activity = Activity.objects.get(name="Бухгалтер")
+        updated_activity_relations_count = len(updated_activity.partners.all())
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(len(Employee.objects.all()), 13)
-        username = response.data.pop("username")
+        self.assertEqual(updated_activity_relations_count, 5)
         self.assertEqual(username[4:8], "AnAn")
         self.assertEqual(
             response.data,
@@ -41,7 +51,7 @@ class EmployeeTestCase(APITestCase):
                 "first_name": "Анна",
                 "father_name": "Анновна",
                 "activity": 4,
-                "manager": 2,
+                "manager": 1,
                 "email": "",
                 "readiness": "not_available",
             },

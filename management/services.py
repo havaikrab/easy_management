@@ -55,3 +55,10 @@ def operator_auto_setting(quest: Quest) -> Quest:
                 quest.status = "3_sabotaged"
                 quest.report += "\nВыполнение задачи прервано. Исполнитель не может быть назначен автоматически"
     return quest
+
+
+def set_activity_relation(patron: Activity, arrived: Activity) -> None:
+    """Создает отношения между должностями"""
+
+    if not patron.partners.filter(pk=arrived.pk).exists():
+        patron.partners.add(arrived)
