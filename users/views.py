@@ -12,7 +12,11 @@ from rest_framework.viewsets import ModelViewSet
 from management.permissions import IsActivityUser
 
 from .models import Employee
-from .serializers import EmployeeBaseSerializer, EmployeeChangePasswordSerializer, EmployeeRegisterSerializer
+from .serializers import (
+    EmployeeBaseSerializer,
+    EmployeeChangePasswordSerializer,
+    EmployeeRegisterSerializer,
+)
 
 
 class EmployeeViewSet(ModelViewSet):

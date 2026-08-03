@@ -14,6 +14,7 @@ from rest_framework.viewsets import ModelViewSet
 from users.models import Employee
 
 from .models import Activity, Quest
+from .paginators import QuestPaginator
 from .permissions import IsActivityConstructor, IsActivityUser
 from .serializers import (
     ActivitySerializer,
@@ -52,6 +53,7 @@ class QuestViewSet(ModelViewSet):
     """Вьюсет для модели задачи"""
 
     queryset = Quest.objects.all()
+    pagination_class = QuestPaginator
 
     def get_queryset(self) -> QuerySet:
         """Ограничение набора отображаемых задач"""
