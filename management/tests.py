@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from django.contrib.auth.models import Permission
 from freezegun import freeze_time
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -617,14 +618,14 @@ class QuestCommonEmployeeTestCase(APITestCase):
 
 
 class QuestTreeTest(APITestCase):
-    """Тестирование функции, возвращающей "дерево-зависимостей" задач"""
+    """Тестирование функциональности, возвращающей "дерево-зависимостей" задач"""
 
     fixtures = ["activities_fixture.json", "employees_fixture.json", "quests_fixture.json"]
 
     def setUp(self) -> None:
         """Предварительная авторизация пользователя"""
 
-        self.user = Employee.objects.get(username="8024IvIvc0e0")
+        self.user = Employee.objects.get(username="7118IrIrde5b")
         self.client.force_authenticate(user=self.user)
 
     def test_quest_dependencies_tree(self) -> None:
@@ -649,4 +650,58 @@ class QuestTreeTest(APITestCase):
                 "sub_quests"
             ],
             dict(),
+        )
+
+    def test_tree_requests(self) -> None:
+        """Запросы на получение дерева зависимостей задач"""
+
+        quest = Quest.objects.get(title="Задача номер 10")
+        denied_response = self.client.get(f"/quests/{quest.pk}/tree/")
+
+        self.assertEqual(denied_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        required_permission = Permission.objects.get(codename="view_quest")
+        user = Employee.objects.get(username="7118IrIrde5b")
+        user.user_permissions.add(required_permission)
+        self.client.force_authenticate(user=user)
+        success_response = self.client.get(f"/quests/{quest.pk}/tree/")
+        long_description = (
+            "Бабушка-заказчик попросила именную скалку на юбилей дедушки, "
+            + "давайте ей прямо сейчас ее сделаем, дело минутное, с меня шоколадка"
+        )
+
+        self.assertEqual(success_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            success_response.data,
+            {
+                "tree": {
+                    "quest": {
+                        "title": "Задача номер 10",
+                        "description": "Рассчитать стоимость работ",
+                        "creator": "Терминал-распределитель: Главный Терминал",
+                        "operator": "Менеджер по работе с клиентами: Иринова Ирина",
+                        "created_at": "2026-07-31 16:18:41.609000+00:00",
+                        "dead_line": "2026-07-31 16:48:41.609000+00:00",
+                        "status": "6_success",
+                        "report": "",
+                        "path_to_root": "",
+                    },
+                    "sub_quests": {
+                        "11": {
+                            "quest": {
+                                "title": "Изготовить скалку",
+                                "description": long_description,
+                                "creator": "Менеджер по работе с клиентами: Иринова Ирина",
+                                "operator": "Столяр: Олегов Олег",
+                                "created_at": "2026-07-31 16:25:11.110000+00:00",
+                                "dead_line": "2026-07-31 20:00:00+00:00",
+                                "status": "6_success",
+                                "report": "Готово",
+                                "path_to_root": "10/",
+                            },
+                            "sub_quests": {},
+                        }
+                    },
+                }
+            },
         )

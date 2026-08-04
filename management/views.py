@@ -15,7 +15,7 @@ from users.models import Employee
 
 from .models import Activity, Quest
 from .paginators import QuestPaginator
-from .permissions import IsActivityConstructor, IsActivityUser
+from .permissions import IsActivityConstructor, IsActivityUser, IsQuestAnalyst
 from .serializers import (
     ActivitySerializer,
     QuestCreatingSerializer,
@@ -23,6 +23,7 @@ from .serializers import (
     QuestSimplifiedSerializer,
     QuestUpdateReportSerializer,
 )
+from .services import get_sub_quests_map
 
 
 class ActivityViewSet(ModelViewSet):
@@ -30,6 +31,7 @@ class ActivityViewSet(ModelViewSet):
 
     queryset = Activity.objects.all()
     serializer_class = ActivitySerializer
+    search_fields = ["name", "description"]
 
     def get_permissions(self) -> Sequence:
         """Ограничение прав использования контроллера"""
@@ -126,3 +128,15 @@ class ManageActivityRelationsView(APIView):
             return Response({"error": "Связь между должностями не существует"}, status=status.HTTP_400_BAD_REQUEST)
         activity.partners.remove(partner)
         return Response({"message": f"Связь между должностями {activity.name} и {partner.name} исключена."})
+
+
+class QuestGetTreeView(APIView):
+    """Контроллер отображения структуры подзадач"""
+
+    permission_classes = [IsAuthenticated, IsQuestAnalyst]
+
+    def get(self, request: Request, pk: int, *args: Any, **kwargs: Any) -> Response:
+        """Отображает "дерево подзадач" для выбранной задачи"""
+
+        quest = get_object_or_404(Quest, pk=pk)
+        return Response({"tree": get_sub_quests_map(quest)})

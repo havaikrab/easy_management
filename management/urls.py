@@ -15,6 +15,7 @@ urlpatterns: list = [
         "activities/<int:activity_pk>/partners/<int:partner_pk>/",
         views.ManageActivityRelationsView.as_view(),
         name="manage_relations",
-    )
+    ),
+    path("quests/<int:pk>/tree/", views.QuestGetTreeView.as_view(), name="quests_tree"),
 ]
 urlpatterns += management_router.urls
