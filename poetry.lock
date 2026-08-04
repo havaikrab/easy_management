@@ -901,6 +901,21 @@ dev = ["build"]
 doc = ["sphinx"]
 
 [[package]]
+name = "types-django-filter"
+version = "26.1.0.20260713"
+description = "Typing stubs for django-filter"
+optional = false
+python-versions = ">=3.10"
+groups = ["lint"]
+files = [
+    {file = "types_django_filter-26.1.0.20260713-py3-none-any.whl", hash = "sha256:a32e6f84685ca67ea7f7ce64e9d74d13d712857d4702e8d218e6570ab34d418a"},
+    {file = "types_django_filter-26.1.0.20260713.tar.gz", hash = "sha256:f295ab0aea679fa8d183a832a4c02748f06f074a43b26ca25d167f7e775a3e26"},
+]
+
+[package.dependencies]
+django-stubs = "*"
+
+[[package]]
 name = "types-pyyaml"
 version = "6.0.12.20260724"
 description = "Typing stubs for PyYAML"

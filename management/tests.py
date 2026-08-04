@@ -617,7 +617,7 @@ class QuestCommonEmployeeTestCase(APITestCase):
         self.assertEqual("Удаление задачи запрещено, пока она имеет связанные подзадачи" in failed_delete.data, True)
 
 
-class QuestTreeTest(APITestCase):
+class QuestTreeTestCase(APITestCase):
     """Тестирование функциональности, возвращающей "дерево-зависимостей" задач"""
 
     fixtures = ["activities_fixture.json", "employees_fixture.json", "quests_fixture.json"]
@@ -694,7 +694,7 @@ class QuestTreeTest(APITestCase):
                                 "creator": "Менеджер по работе с клиентами: Иринова Ирина",
                                 "operator": "Столяр: Олегов Олег",
                                 "created_at": "2026-07-31 16:25:11.110000+00:00",
-                                "dead_line": "2026-07-31 20:00:00+00:00",
+                                "dead_line": "2026-07-31 19:59:00+00:00",
                                 "status": "6_success",
                                 "report": "Готово",
                                 "path_to_root": "10/",
@@ -705,3 +705,97 @@ class QuestTreeTest(APITestCase):
                 }
             },
         )
+
+
+class QuestFilteringTestCase(APITestCase):
+    """Тестирование фильтрсета модели Quest"""
+
+    fixtures = ["activities_fixture.json", "employees_fixture.json", "quests_fixture.json"]
+
+    def setUp(self) -> None:
+        """Предварительная авторизация пользователя"""
+
+        self.user = Employee.objects.get(username="7745AlAl2aec")
+        self.client.force_authenticate(user=self.user)
+
+    def test_search_by_title(self) -> None:
+        """Поиск объектов по вхождению строки в название задачи"""
+
+        titles_list = ["Нужен еще один инженер", "Нанять еще одного наладчика"]
+        response = self.client.get("/quests/?title__icontains=еще од&ordering=-id")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_description(self) -> None:
+        """Поиск объектов по вхождению строки в описание задачи"""
+
+        titles_list = ["Привлечь клиентов", "Выделить средства для оплаты рекламы"]
+        response = self.client.get("/quests/?description__icontains=РЕКЛАМ&ordering=created_at")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_creator(self) -> None:
+        """Поиск задач по id создателя"""
+
+        creator_4 = Employee.objects.get(username="7750OlOl3545")
+        creator_9 = Employee.objects.get(username="7118IrIrde5b")
+        titles_list = [
+            "Подготовить место для сборки оборудования",
+            "Изготовить скалку",
+            "Выдать комплектующие",
+            "Выделить средства для оплаты рекламы",
+        ]
+        response = self.client.get(f"/quests/?creator__in={creator_4.pk},{creator_9.pk}&ordering=-dead_line")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_related_quest(self) -> None:
+        """Поиск задач по id задачи-родителя"""
+
+        related_quest = Quest.objects.get(title="Запустить производство")
+        titles_list = [
+            "Выдать комплектующие",
+            "Подготовить место для сборки оборудования",
+            "Нанять еще одного наладчика",
+        ]
+        response = self.client.get(f"/quests/?related_quest={related_quest.pk}&ordering=dead_line")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_operator(self) -> None:
+        """Поиск задач по id исполнителя"""
+
+        operator = Employee.objects.get(username="7745AlAl2aec")
+        titles_list = ["Нанять еще одного наладчика"]
+        response = self.client.get(f"/quests/?operator={operator.pk}&dead_line__gt=2026-08-11")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_required_activity(self) -> None:
+        """Поиск задач по id должности исполнителя"""
+
+        activity = Activity.objects.get(name="Начальник отдела кадров")
+        titles_list = ["Принять на работу бухгалтера"]
+        response = self.client.get(f"/quests/?required={activity.pk}&created_at__lt=2026-07-31T12:00:00Z")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_status(self) -> None:
+        """Поиск задач по статусу"""
+
+        titles_list = [
+            "Изготовить скалку",
+            "Задача номер 10",
+            "Выдать комплектующие",
+            "Выделить средства для оплаты рекламы",
+        ]
+        response = self.client.get("/quests/?status=6_success&dead_line__lt=2026-07-31T20:00:00Z&ordering=-created_at")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)

@@ -29,7 +29,8 @@ lint = [
     "flake8 (>=7.3.0,<8.0.0)",
     "mypy (>=2.3.0,<3.0.0)",
     "django-stubs (>=6.0.7,<7.0.0)",
-    "djangorestframework-stubs (>=3.17.1,<4.0.0)"
+    "djangorestframework-stubs (>=3.17.1,<4.0.0)",
+    "types-django-filter (>=26.1.0.20260713,<27.0.0.0)"
 ]
 dev = [
     "coverage (>=7.15.2,<8.0.0)",
