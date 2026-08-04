@@ -3,7 +3,8 @@ from typing import Any, Sequence, cast
 from django.db.models import ProtectedError, Q, QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from django.utils.decorators import method_decorator
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -235,6 +236,49 @@ class QuestViewSet(ModelViewSet):
             raise ValidationError("Удаление задачи запрещено, пока она имеет связанные подзадачи")
 
 
+@method_decorator(
+    name="post",
+    decorator=extend_schema(
+        summary="Создание связей между должностями",
+        description="""
+Необходима авторизация, и обязательное наличие у пользователя права "add_activity" или статуса супер-пользователя.
+Пользователь имеющий доступ к контроллеру может налаживать связи между должностями. Сотрудники, чьи должности имеют
+связь могут создавать друг для друга задачи. При регистрации нового пользователя проверяется наличие связи между его
+должностью и должностью его руководителя. При отсутствии такой связи, она создается автоматически.
+ID связываемых должностей передаются в адресной строке, тело запроса не содержит дополнительных данных.
+""",
+        responses={
+            200: OpenApiResponse(description="Связь создана"),
+            401: OpenApiResponse(description="Пользователь не авторизован"),
+            400: OpenApiResponse(description="Связь между должностями уже существует"),
+            403: OpenApiResponse(description="У пользователя отсутствуют необходимые права"),
+            404: OpenApiResponse(
+                description="Одна или обе должности не существуют",
+            ),
+        },
+    ),
+)
+@method_decorator(
+    name="delete",
+    decorator=extend_schema(
+        summary="Удаление связей между должностями",
+        description="""
+Необходима авторизация, и обязательное наличие у пользователя права "add_activity" или статуса супер-пользователя.
+Пользователь имеющий доступ к контроллеру может разрывать связи между должностями. Сотрудники, чьи должности не имеют
+связи, не могут создавать друг для друга задачи. ID должностей передаются в адресной строке,
+тело запроса не содержит дополнительных данных.
+""",
+        responses={
+            200: OpenApiResponse(description="Связь удалена"),
+            401: OpenApiResponse(description="Пользователь не авторизован"),
+            400: OpenApiResponse(description="Связи между должностями не существует"),
+            403: OpenApiResponse(description="У пользователя отсутствуют необходимые права"),
+            404: OpenApiResponse(
+                description="Одна или обе должности не существуют",
+            ),
+        },
+    ),
+)
 class ManageActivityRelationsView(APIView):
     """Контроллер управления связями между должностями"""
 
@@ -261,6 +305,26 @@ class ManageActivityRelationsView(APIView):
         return Response({"message": f"Связь между должностями {activity.name} и {partner.name} исключена."})
 
 
+@method_decorator(
+    name="get",
+    decorator=extend_schema(
+        summary="Получение структуры подзадач",
+        description="""
+Необходима авторизация, и обязательное наличие у пользователя права "view_quest" или статуса супер-пользователя.
+Пользователь имеющий доступ к контроллеру получает возможность изучать структуру постановки и взаимосвязи задач,
+от которых зависит выполнение основной задачи. Каждый "узел" возвращаемой структуры содержит
+детальную информацию о конкретной подзадаче.
+""",
+        responses={
+            200: OpenApiResponse(description="json-структура зависимостей задач"),
+            401: OpenApiResponse(description="Пользователь не авторизован"),
+            403: OpenApiResponse(description="У пользователя отсутствуют необходимые права"),
+            404: OpenApiResponse(
+                description="Главная задача не найдена",
+            ),
+        },
+    ),
+)
 class QuestGetTreeView(APIView):
     """Контроллер отображения структуры подзадач"""
 
