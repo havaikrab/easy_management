@@ -3,6 +3,7 @@ from typing import Any, Sequence, cast
 from django.db.models import ProtectedError, Q, QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -27,6 +28,50 @@ from .serializers import (
 from .services import get_sub_quests_map
 
 
+@extend_schema_view(
+    create=extend_schema(
+        summary="Создание новой должности",
+        description="""
+Необходима авторизация, и обязательное наличие у пользователя права "add_activity" или статуса супер-пользователя.
+В теле запроса обязательно передаются ключи "name" и "description", все значения "name" должны быть уникальными.
+""",
+    ),
+    list=extend_schema(
+        summary="Отображение списка должностей",
+        description="""
+Необходима авторизация, и обязательное наличие у пользователя права "view_activity" или статуса супер-пользователя.
+В запросе могут передаваться параметры для поиска объектов с указанием подстроки,
+входящей в название или описание должности
+""",
+    ),
+    retrieve=extend_schema(
+        summary="Отображение должности",
+        description="""
+Необходима авторизация, и обязательное наличие у пользователя права "view_activity" или статуса супер-пользователя.
+""",
+    ),
+    update=extend_schema(
+        summary="Полное обновление должности",
+        description="""
+Необходима авторизация, и обязательное наличие у пользователя права "add_activity" или статуса супер-пользователя.
+В теле запроса необходимо передать обязательные ключи "name" и "description" с соответствующими значениями.
+""",
+    ),
+    partial_update=extend_schema(
+        summary="Частичное обновление должности",
+        description="""
+Необходима авторизация, и обязательное наличие у пользователя права "add_activity" или статуса супер-пользователя.
+В теле запроса нужно указать новые значения для одного или нескольких полей "name", "description" или "partners".
+""",
+    ),
+    destroy=extend_schema(
+        summary="Удаление должности",
+        description="""
+Необходима авторизация, и обязательное наличие у пользователя права "add_activity" или статуса супер-пользователя.
+Удаление должности невозможно, пока в БД существуют объекты пользователей, имеющие связь с этой должностью
+""",
+    ),
+)
 class ActivityViewSet(ModelViewSet):
     """Вьюсет для модели должности"""
 
