@@ -1,16 +1,18 @@
 from typing import Any, Sequence, cast
 
 from django.db.models import ProtectedError, Q, QuerySet
+from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from management.models import Activity
 from management.permissions import IsActivityUser
 
 from .models import Employee
@@ -19,6 +21,7 @@ from .serializers import (
     EmployeeChangePasswordSerializer,
     EmployeeRegisterSerializer,
 )
+from .services import get_sorted_range_from_activ_operators
 
 
 @extend_schema_view(
@@ -155,6 +158,7 @@ class EmployeeViewSet(ModelViewSet):
 class EmployeeChangePasswordAPIView(APIView):
     """Контроллер обновления пароля от аккаунта сотрудника"""
 
+    permission_classes = [IsAuthenticated]
     serializer_class = EmployeeChangePasswordSerializer
 
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -164,3 +168,39 @@ class EmployeeChangePasswordAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@method_decorator(
+    name="get",
+    decorator=extend_schema(
+        summary="Получение потенциальных операторов для выполнения задачи",
+        description="""
+Эндпоинт возвращает список сотрудников с требуемой должностью и "readiness"-статусом равным "ready_to_work".
+Список отсортирован по количеству активных задач у соответствующего сотрудника,
+направление сортировки задается параметром "reverse" через адресную строку.
+Каждый элемент списка также включает список с краткими характеристиками активных задач пользователя.
+""",
+        responses={
+            200: OpenApiResponse(description='JSON-структура "список словарей" с данными сотрудников.'),
+            401: OpenApiResponse(description="Пользователь не авторизован."),
+            403: OpenApiResponse(description="Должность сотрудника и запрашиваемая должность не имеют связи."),
+            404: OpenApiResponse(description="Запрашиваемая должность не найдена."),
+        },
+    ),
+)
+class CandidatesListView(APIView):
+    """Контроллер, отображающий отсортированный по количеству активных задач
+    список сотрудников определенной должности"""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, activity_pk: int, *args: Any, **kwargs: Any) -> Response:
+        """GET-запрос на отображение списка сотрудников"""
+
+        user = cast(Employee, request.user)
+        required_activity = get_object_or_404(Activity, pk=activity_pk)
+        if not user.activity.partners.filter(pk=activity_pk).exists():
+            raise PermissionDenied("Отсутствует право получения информации о сотрудниках c указанной должностью")
+        reverse = request.query_params.get("reverse", "false").lower() == "true"
+        data = get_sorted_range_from_activ_operators(required_activity, reverse=reverse)
+        return Response(data)
