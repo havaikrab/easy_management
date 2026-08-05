@@ -4,7 +4,7 @@ from time import time
 from unidecode import unidecode
 
 from management.models import Activity
-from management.services import get_operators_with_quests
+from management.services import get_operators_with_quests_for_activities
 
 
 def generate_username(data: dict) -> str:
@@ -19,7 +19,9 @@ def generate_username(data: dict) -> str:
 def get_sorted_range_from_activ_operators(activity: Activity, reverse: bool = False) -> list[dict]:
     """Возвращает список доступных сотрудников определенной должности, отсортированный по количеству активных задач"""
 
-    operators = get_operators_with_quests(activity, ["1_created", "2_processing", "3_sabotaged"], readiness=True)
+    operators = get_operators_with_quests_for_activities(
+        [activity], ["1_created", "2_processing", "3_sabotaged"], readiness=True
+    )[str(activity.pk)]
     for value in operators.values():
         operator = value.pop("object")
         operator_data = {

@@ -299,3 +299,11 @@ class GetActiveOperatorsTestCase(APITestCase):
         self.assertEqual(len(response.data[0]["quests"]), 2)
         self.assertEqual(response_reverse.data[0]["operator"]["username"], operator_5.username)
         self.assertEqual(len(response_reverse.data[0]["quests"]), 3)
+
+    def test_list_candidates_denied(self) -> None:
+        """Запрет на получение списка пользователей, не имеющих связанную должность"""
+
+        required_activity = Activity.objects.get(name="Бухгалтер")
+        response = self.client.get(f"/users/candidates/{required_activity.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

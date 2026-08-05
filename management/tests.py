@@ -8,7 +8,7 @@ from rest_framework.test import APITestCase
 from users.models import Employee
 
 from .models import Activity, Quest
-from .services import get_operators_with_quests, get_sub_quests_map
+from .services import get_operators_with_quests_for_activities, get_sub_quests_map
 
 
 class ActivityTestCase(APITestCase):
@@ -436,7 +436,9 @@ class QuestSpecialTestCase(APITestCase):
 
         self.assertEqual(response_post.status_code, status.HTTP_201_CREATED)
 
-        operators_1 = get_operators_with_quests(required_activity, ["1_created", "6_success"])
+        operators_1 = get_operators_with_quests_for_activities([required_activity], ["1_created", "6_success"])[
+            str(required_activity.pk)
+        ]
         operator_5 = Employee.objects.get(username="8064AlAla551")
         operator_6 = Employee.objects.get(username="8068DaDa0b6d")
         operator_7 = Employee.objects.get(username="8024IvIvhds0")
@@ -450,7 +452,9 @@ class QuestSpecialTestCase(APITestCase):
         )
 
         response_quest_patch = self.client.patch(f"/quests/{quest_12.pk}/", data={"status": "3_sabotaged"})
-        operators_2 = get_operators_with_quests(required_activity, ["1_created", "3_sabotaged"])
+        operators_2 = get_operators_with_quests_for_activities([required_activity], ["1_created", "3_sabotaged"])[
+            str(required_activity.pk)
+        ]
 
         self.assertEqual(response_quest_patch.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -461,11 +465,11 @@ class QuestSpecialTestCase(APITestCase):
         operator_5.save()
         quest_7.operator = operator_5
         quest_7.save()
-        operators_3 = get_operators_with_quests(
-            required_activity,
+        operators_3 = get_operators_with_quests_for_activities(
+            [required_activity],
             ["1_created", "2_processing", "3_sabotaged", "4_expired", "5_cancelled", "6_success"],
             readiness=False,
-        )
+        )[str(required_activity.pk)]
         quests_by_5 = set([quest.pk for quest in operators_3["5"].pop("quests")])
         operators_3["5"]["quests"] = quests_by_5
 
@@ -478,11 +482,11 @@ class QuestSpecialTestCase(APITestCase):
             },
         )
         self.assertEqual(
-            get_operators_with_quests(
-                activity=Activity.objects.get(name="Оператор ЧПУ"),
+            get_operators_with_quests_for_activities(
+                activities_list=[Activity.objects.get(name="Оператор ЧПУ")],
                 quest_statuses=["1_created", "2_processing", "3_sabotaged", "4_expired", "5_cancelled", "6_success"],
             ),
-            dict(),
+            {"6": dict()},
         )
 
     def test_quest_update_time_out(self) -> None:
@@ -535,7 +539,7 @@ class QuestTransferResponsibilityCase(APITestCase):
         self_user_tasks = Quest.objects.filter(operator__username="8064AlAla551", status="1_created")
         user_6_tasks = Quest.objects.filter(operator__username="8068DaDa0b6d", status="1_created")
 
-        self.assertEqual((len(new_tasks), len(self_user_tasks), len(user_6_tasks)), (4, 1, 3))
+        self.assertEqual((len(new_tasks), len(self_user_tasks), len(user_6_tasks)), (4, 2, 2))
 
     def test_quest_auto_sabotaged_status(self) -> None:
         """Создание задачи для несуществующего сотрудника"""
