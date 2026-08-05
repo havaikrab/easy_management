@@ -621,8 +621,8 @@ class QuestCommonEmployeeTestCase(APITestCase):
         self.assertEqual("Удаление задачи запрещено, пока она имеет связанные подзадачи" in failed_delete.data, True)
 
 
-class QuestTreeTestCase(APITestCase):
-    """Тестирование функциональности, возвращающей "дерево-зависимостей" задач"""
+class QuestAnalysisTestCase(APITestCase):
+    """Тестирование аналитической функциональности для модели Quest"""
 
     fixtures = ["activities_fixture.json", "employees_fixture.json", "quests_fixture.json"]
 
@@ -709,6 +709,67 @@ class QuestTreeTestCase(APITestCase):
                 }
             },
         )
+
+    def test_getting_important_quest_list(self) -> None:
+        """Получение списка невыполняемых задач"""
+
+        quests = Quest.objects.exclude(status__in=["4_expired", "2_processing"])
+        for quest in quests:
+            quest.operator = None
+            quest.save()
+        denied_response = self.client.get("/quests/important/")
+        required_permission = Permission.objects.get(codename="view_quest")
+        user = Employee.objects.get(username="7118IrIrde5b")
+        user.user_permissions.add(required_permission)
+        self.client.force_authenticate(user=user)
+        success_response = self.client.get("/quests/important/")
+        sorted_list = sorted(success_response.data["quests"], key=lambda x: x["id"])
+        for i in sorted_list:
+            self.assertEqual("dead_line" in i, True)
+            i.pop("dead_line")
+        task_7 = sorted_list.pop(3)
+        task_7_candidates = task_7.pop("candidates")
+
+        self.assertEqual(denied_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(success_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            sorted_list,
+            [
+                {
+                    "id": 1,
+                    "title": "Привлечь клиентов",
+                    "candidates": ["Иринова Ирина Ириновна"],
+                },
+                {
+                    "id": 2,
+                    "title": "Выделить средства для оплаты рекламы",
+                    "candidates": ["Альбертов Альберт Альбертович"],
+                },
+                {
+                    "id": 5,
+                    "title": "Выдать комплектующие",
+                    "candidates": ["Галинина Галина Галиновна"],
+                },
+                {
+                    "id": 10,
+                    "title": "Задача номер 10",
+                    "candidates": ["Иринова Ирина Ириновна"],
+                },
+                {
+                    "id": 11,
+                    "title": "Изготовить скалку",
+                    "candidates": ["Олегов Олег Олегович"],
+                },
+            ],
+        )
+        self.assertEqual(
+            task_7,
+            {
+                "id": 7,
+                "title": "Подготовить место для сборки оборудования",
+            },
+        )
+        self.assertEqual(set(task_7_candidates), {"Александров Александр Александрович", "Данилов Данил Данилович"})
 
 
 class QuestFilteringTestCase(APITestCase):

@@ -26,7 +26,7 @@ from .serializers import (
     QuestSimplifiedSerializer,
     QuestUpdateReportSerializer,
 )
-from .services import get_sub_quests_map
+from .services import get_important_quests_with_candidates, get_sub_quests_map
 
 
 @extend_schema_view(
@@ -335,3 +335,33 @@ class QuestGetTreeView(APIView):
 
         quest = get_object_or_404(Quest, pk=pk)
         return Response({"tree": get_sub_quests_map(quest)})
+
+
+@method_decorator(
+    name="get",
+    decorator=extend_schema(
+        summary="Получение списка невыполняемых задач",
+        description="""
+Необходима авторизация, и обязательное наличие у пользователя права "view_quest" или статуса супер-пользователя.
+Контроллер отображает список задач не имеющих исполнителя и задач, выполнение которых прервано по каким-то причинам.
+Контроллер "закрыт" для общего пользования сотрудников. Пользователям, не имеющим права "view_quest" или
+статус супер-пользователя доступен большой выбор фильтров основного контроллера обработки задач.
+""",
+        responses={
+            200: OpenApiResponse(
+                description="Список остановленных задач с приложенными списками имен потенциальных исполнителей"
+            ),
+            401: OpenApiResponse(description="Пользователь не авторизован"),
+            403: OpenApiResponse(description="У пользователя отсутствуют необходимые права"),
+        },
+    ),
+)
+class SearchStoppedQuestsListView(APIView):
+    """Контроллер отображения приостановленных важных задач"""
+
+    permission_classes = [IsAuthenticated, IsQuestAnalyst]
+
+    def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Возвращает список важных задач с потенциальными исполнителями"""
+
+        return Response({"quests": get_important_quests_with_candidates()})
