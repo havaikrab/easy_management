@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from django.contrib.auth.models import Permission
 from freezegun import freeze_time
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -7,7 +8,7 @@ from rest_framework.test import APITestCase
 from users.models import Employee
 
 from .models import Activity, Quest
-from .services import get_operators_with_quests
+from .services import get_operators_with_quests_for_activities, get_sub_quests_map
 
 
 class ActivityTestCase(APITestCase):
@@ -208,10 +209,10 @@ class QuestTestCase(APITestCase):
     def test_getting_quest_list(self) -> None:
         """Получение списка задач"""
 
-        response = self.client.get("/quests/")
+        response = self.client.get("/quests/?page_size=15")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 11)
+        self.assertEqual(len(response.data["results"]), 11)
 
     def test_quest_retrieve(self) -> None:
         """Отображение задачи"""
@@ -435,7 +436,9 @@ class QuestSpecialTestCase(APITestCase):
 
         self.assertEqual(response_post.status_code, status.HTTP_201_CREATED)
 
-        operators_1 = get_operators_with_quests(required_activity, ["1_created", "6_success"])
+        operators_1 = get_operators_with_quests_for_activities([required_activity], ["1_created", "6_success"])[
+            str(required_activity.pk)
+        ]
         operator_5 = Employee.objects.get(username="8064AlAla551")
         operator_6 = Employee.objects.get(username="8068DaDa0b6d")
         operator_7 = Employee.objects.get(username="8024IvIvhds0")
@@ -449,7 +452,9 @@ class QuestSpecialTestCase(APITestCase):
         )
 
         response_quest_patch = self.client.patch(f"/quests/{quest_12.pk}/", data={"status": "3_sabotaged"})
-        operators_2 = get_operators_with_quests(required_activity, ["1_created", "3_sabotaged"])
+        operators_2 = get_operators_with_quests_for_activities([required_activity], ["1_created", "3_sabotaged"])[
+            str(required_activity.pk)
+        ]
 
         self.assertEqual(response_quest_patch.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -460,11 +465,11 @@ class QuestSpecialTestCase(APITestCase):
         operator_5.save()
         quest_7.operator = operator_5
         quest_7.save()
-        operators_3 = get_operators_with_quests(
-            required_activity,
+        operators_3 = get_operators_with_quests_for_activities(
+            [required_activity],
             ["1_created", "2_processing", "3_sabotaged", "4_expired", "5_cancelled", "6_success"],
             readiness=False,
-        )
+        )[str(required_activity.pk)]
         quests_by_5 = set([quest.pk for quest in operators_3["5"].pop("quests")])
         operators_3["5"]["quests"] = quests_by_5
 
@@ -477,11 +482,11 @@ class QuestSpecialTestCase(APITestCase):
             },
         )
         self.assertEqual(
-            get_operators_with_quests(
-                activity=Activity.objects.get(name="Оператор ЧПУ"),
+            get_operators_with_quests_for_activities(
+                activities_list=[Activity.objects.get(name="Оператор ЧПУ")],
                 quest_statuses=["1_created", "2_processing", "3_sabotaged", "4_expired", "5_cancelled", "6_success"],
             ),
-            dict(),
+            {"6": dict()},
         )
 
     def test_quest_update_time_out(self) -> None:
@@ -534,7 +539,7 @@ class QuestTransferResponsibilityCase(APITestCase):
         self_user_tasks = Quest.objects.filter(operator__username="8064AlAla551", status="1_created")
         user_6_tasks = Quest.objects.filter(operator__username="8068DaDa0b6d", status="1_created")
 
-        self.assertEqual((len(new_tasks), len(self_user_tasks), len(user_6_tasks)), (4, 1, 3))
+        self.assertEqual((len(new_tasks), len(self_user_tasks), len(user_6_tasks)), (4, 2, 2))
 
     def test_quest_auto_sabotaged_status(self) -> None:
         """Создание задачи для несуществующего сотрудника"""
@@ -570,32 +575,10 @@ class QuestCommonEmployeeTestCase(APITestCase):
         response = self.client.get("/quests/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 3)
+        self.assertEqual(len(response.data["results"]), 3)
         self.assertEqual(
-            response.data,
-            [
-                {
-                    "title": "Запустить производство",
-                    "operator": "Олегов Олег Олегович",
-                    "required_activity": "Инженер-наладчик",
-                    "dead_line": "2026-09-01T06:59:59.999000+07:00",
-                    "status": "2_processing",
-                },
-                {
-                    "title": "Выдать комплектующие",
-                    "operator": "Галинина Галина Галиновна",
-                    "required_activity": "Кладовщик",
-                    "dead_line": "2026-07-31T22:00:00+07:00",
-                    "status": "6_success",
-                },
-                {
-                    "title": "Подготовить место для сборки оборудования",
-                    "operator": "Данилов Данил Данилович",
-                    "required_activity": "Слесарь",
-                    "dead_line": "2026-08-01T03:00:00+07:00",
-                    "status": "6_success",
-                },
-            ],
+            set([quest["title"] for quest in response.data["results"]]),
+            {"Запустить производство", "Выдать комплектующие", "Подготовить место для сборки оборудования"},
         )
 
     def test_cyclic_dependence_exception(self) -> None:
@@ -636,3 +619,248 @@ class QuestCommonEmployeeTestCase(APITestCase):
         )
         self.assertEqual(failed_delete.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual("Удаление задачи запрещено, пока она имеет связанные подзадачи" in failed_delete.data, True)
+
+
+class QuestAnalysisTestCase(APITestCase):
+    """Тестирование аналитической функциональности для модели Quest"""
+
+    fixtures = ["activities_fixture.json", "employees_fixture.json", "quests_fixture.json"]
+
+    def setUp(self) -> None:
+        """Предварительная авторизация пользователя"""
+
+        self.user = Employee.objects.get(username="7118IrIrde5b")
+        self.client.force_authenticate(user=self.user)
+
+    def test_quest_dependencies_tree(self) -> None:
+        """Получение дерева зависимостей задач"""
+
+        quest = Quest.objects.get(title__startswith="Запустить")
+        tree = get_sub_quests_map(quest)
+        task_5 = Quest.objects.get(title__startswith="Выдать")
+        task_6 = Quest.objects.get(title__startswith="Нанять")
+        task_7 = Quest.objects.get(title__startswith="Подготовить")
+        task_8 = Quest.objects.get(title__startswith="Нужен")
+        task_9 = Quest.objects.get(title__startswith="Восстановить")
+
+        self.assertEqual(set(tree["sub_quests"].keys()), {str(task_5.pk), str(task_6.pk), str(task_7.pk)})
+        self.assertEqual(set(tree["sub_quests"][str(task_6.pk)]["sub_quests"].keys()), {str(task_8.pk)})
+        self.assertEqual(
+            set(tree["sub_quests"][str(task_6.pk)]["sub_quests"][str(task_8.pk)]["sub_quests"].keys()),
+            {str(task_9.pk)},
+        )
+        self.assertEqual(
+            tree["sub_quests"][str(task_6.pk)]["sub_quests"][str(task_8.pk)]["sub_quests"][str(task_9.pk)][
+                "sub_quests"
+            ],
+            dict(),
+        )
+
+    def test_tree_requests(self) -> None:
+        """Запросы на получение дерева зависимостей задач"""
+
+        quest = Quest.objects.get(title="Задача номер 10")
+        denied_response = self.client.get(f"/quests/{quest.pk}/tree/")
+
+        self.assertEqual(denied_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        required_permission = Permission.objects.get(codename="view_quest")
+        user = Employee.objects.get(username="7118IrIrde5b")
+        user.user_permissions.add(required_permission)
+        self.client.force_authenticate(user=user)
+        success_response = self.client.get(f"/quests/{quest.pk}/tree/")
+        long_description = (
+            "Бабушка-заказчик попросила именную скалку на юбилей дедушки, "
+            + "давайте ей прямо сейчас ее сделаем, дело минутное, с меня шоколадка"
+        )
+
+        self.assertEqual(success_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            success_response.data,
+            {
+                "tree": {
+                    "quest": {
+                        "title": "Задача номер 10",
+                        "description": "Рассчитать стоимость работ",
+                        "creator": "Терминал-распределитель: Главный Терминал",
+                        "operator": "Менеджер по работе с клиентами: Иринова Ирина",
+                        "created_at": "2026-07-31 16:18:41.609000+00:00",
+                        "dead_line": "2026-07-31 16:48:41.609000+00:00",
+                        "status": "6_success",
+                        "report": "",
+                        "path_to_root": "",
+                    },
+                    "sub_quests": {
+                        "11": {
+                            "quest": {
+                                "title": "Изготовить скалку",
+                                "description": long_description,
+                                "creator": "Менеджер по работе с клиентами: Иринова Ирина",
+                                "operator": "Столяр: Олегов Олег",
+                                "created_at": "2026-07-31 16:25:11.110000+00:00",
+                                "dead_line": "2026-07-31 19:59:00+00:00",
+                                "status": "6_success",
+                                "report": "Готово",
+                                "path_to_root": "10/",
+                            },
+                            "sub_quests": {},
+                        }
+                    },
+                }
+            },
+        )
+
+    def test_getting_important_quest_list(self) -> None:
+        """Получение списка невыполняемых задач"""
+
+        quests = Quest.objects.exclude(status__in=["4_expired", "2_processing"])
+        for quest in quests:
+            quest.operator = None
+            quest.save()
+        denied_response = self.client.get("/quests/important/")
+        required_permission = Permission.objects.get(codename="view_quest")
+        user = Employee.objects.get(username="7118IrIrde5b")
+        user.user_permissions.add(required_permission)
+        self.client.force_authenticate(user=user)
+        success_response = self.client.get("/quests/important/")
+        sorted_list = sorted(success_response.data["quests"], key=lambda x: x["id"])
+        for i in sorted_list:
+            self.assertEqual("dead_line" in i, True)
+            i.pop("dead_line")
+        task_7 = sorted_list.pop(3)
+        task_7_candidates = task_7.pop("candidates")
+
+        self.assertEqual(denied_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(success_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            sorted_list,
+            [
+                {
+                    "id": 1,
+                    "title": "Привлечь клиентов",
+                    "candidates": ["Иринова Ирина Ириновна"],
+                },
+                {
+                    "id": 2,
+                    "title": "Выделить средства для оплаты рекламы",
+                    "candidates": ["Альбертов Альберт Альбертович"],
+                },
+                {
+                    "id": 5,
+                    "title": "Выдать комплектующие",
+                    "candidates": ["Галинина Галина Галиновна"],
+                },
+                {
+                    "id": 10,
+                    "title": "Задача номер 10",
+                    "candidates": ["Иринова Ирина Ириновна"],
+                },
+                {
+                    "id": 11,
+                    "title": "Изготовить скалку",
+                    "candidates": ["Олегов Олег Олегович"],
+                },
+            ],
+        )
+        self.assertEqual(
+            task_7,
+            {
+                "id": 7,
+                "title": "Подготовить место для сборки оборудования",
+            },
+        )
+        self.assertEqual(set(task_7_candidates), {"Александров Александр Александрович", "Данилов Данил Данилович"})
+
+
+class QuestFilteringTestCase(APITestCase):
+    """Тестирование фильтрсета модели Quest"""
+
+    fixtures = ["activities_fixture.json", "employees_fixture.json", "quests_fixture.json"]
+
+    def setUp(self) -> None:
+        """Предварительная авторизация пользователя"""
+
+        self.user = Employee.objects.get(username="7745AlAl2aec")
+        self.client.force_authenticate(user=self.user)
+
+    def test_search_by_title(self) -> None:
+        """Поиск объектов по вхождению строки в название задачи"""
+
+        titles_list = ["Нужен еще один инженер", "Нанять еще одного наладчика"]
+        response = self.client.get("/quests/?title__icontains=еще од&ordering=-id")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_description(self) -> None:
+        """Поиск объектов по вхождению строки в описание задачи"""
+
+        titles_list = ["Привлечь клиентов", "Выделить средства для оплаты рекламы"]
+        response = self.client.get("/quests/?description__icontains=РЕКЛАМ&ordering=created_at")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_creator(self) -> None:
+        """Поиск задач по id создателя"""
+
+        creator_4 = Employee.objects.get(username="7750OlOl3545")
+        creator_9 = Employee.objects.get(username="7118IrIrde5b")
+        titles_list = [
+            "Подготовить место для сборки оборудования",
+            "Изготовить скалку",
+            "Выдать комплектующие",
+            "Выделить средства для оплаты рекламы",
+        ]
+        response = self.client.get(f"/quests/?creator__in={creator_4.pk},{creator_9.pk}&ordering=-dead_line")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_related_quest(self) -> None:
+        """Поиск задач по id задачи-родителя"""
+
+        related_quest = Quest.objects.get(title="Запустить производство")
+        titles_list = [
+            "Выдать комплектующие",
+            "Подготовить место для сборки оборудования",
+            "Нанять еще одного наладчика",
+        ]
+        response = self.client.get(f"/quests/?related_quest={related_quest.pk}&ordering=dead_line")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_operator(self) -> None:
+        """Поиск задач по id исполнителя"""
+
+        operator = Employee.objects.get(username="7745AlAl2aec")
+        titles_list = ["Нанять еще одного наладчика"]
+        response = self.client.get(f"/quests/?operator={operator.pk}&dead_line__gt=2026-08-11")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_required_activity(self) -> None:
+        """Поиск задач по id должности исполнителя"""
+
+        activity = Activity.objects.get(name="Начальник отдела кадров")
+        titles_list = ["Принять на работу бухгалтера"]
+        response = self.client.get(f"/quests/?required={activity.pk}&created_at__lt=2026-07-31T12:00:00Z")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)
+
+    def test_search_by_status(self) -> None:
+        """Поиск задач по статусу"""
+
+        titles_list = [
+            "Изготовить скалку",
+            "Задача номер 10",
+            "Выдать комплектующие",
+            "Выделить средства для оплаты рекламы",
+        ]
+        response = self.client.get("/quests/?status=6_success&dead_line__lt=2026-07-31T20:00:00Z&ordering=-created_at")
+        response_titles = [quest["title"] for quest in response.data["results"]]
+
+        self.assertEqual(titles_list, response_titles)

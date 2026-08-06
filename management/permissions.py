@@ -31,3 +31,17 @@ class IsActivityUser(BasePermission):
         if isinstance(user, Employee):
             return user.has_perm("management.view_activity") or user.is_superuser
         return False
+
+
+class IsQuestAnalyst(BasePermission):
+    """Определяет право просматривать структуру задач с их подзадачами"""
+
+    message = "Доступ ограничен. Необходимы права аналитика задач"
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Проверка, имеет ли пользователь право просматривать объекты модели Quest"""
+
+        user = request.user
+        if isinstance(user, Employee):
+            return user.has_perm("management.view_quest") or user.is_superuser
+        return False

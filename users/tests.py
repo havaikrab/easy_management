@@ -3,7 +3,7 @@ from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from management.models import Activity
+from management.models import Activity, Quest
 
 from .models import Employee
 
@@ -258,3 +258,52 @@ class CreateSuperUserTestCase(APITestCase):
             Activity.objects.get(name="Временный админ").description,
             "Должность Временный админ создана автоматически для пользователя super_admin",
         )
+
+
+class GetActiveOperatorsTestCase(APITestCase):
+    """Получение списка сотрудников, отсортированного по количеству их активных задач"""
+
+    fixtures = ["activities_fixture.json", "employees_fixture.json", "quests_fixture.json"]
+
+    def setUp(self) -> None:
+        """Предварительная авторизация пользователя"""
+
+        self.user = Employee.objects.get(username="7750OlOl3545")
+        self.client.force_authenticate(user=self.user)
+
+    def test_getting_candidates(self) -> None:
+        """Получение отсортированного списка сотрудников, определенной должности"""
+
+        quests = Quest.objects.all()
+        operator_5 = Employee.objects.get(username="8064AlAla551")
+        operator_6 = Employee.objects.get(username="8068DaDa0b6d")
+        creator = Employee.objects.get(username="7750OlOl3545")
+        required_activity = Activity.objects.get(name="Слесарь")
+        for i in quests:
+            if len(i.title) % 2 == 0:
+                i.operator = operator_5
+            else:
+                i.operator = operator_6
+            if i.status == "4_expired":
+                i.status = "1_created"
+            i.creator = creator
+            i.required = required_activity
+            i.save()
+        response = self.client.get(f"/users/candidates/{required_activity.pk}/")
+        response_reverse = self.client.get(f"/users/candidates/{required_activity.pk}/?reverse=TRUE")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_reverse.status_code, status.HTTP_200_OK)
+        self.assertEqual((len(response.data), len(response_reverse.data)), (2, 2))
+        self.assertEqual(response.data[0]["operator"]["username"], operator_6.username)
+        self.assertEqual(len(response.data[0]["quests"]), 2)
+        self.assertEqual(response_reverse.data[0]["operator"]["username"], operator_5.username)
+        self.assertEqual(len(response_reverse.data[0]["quests"]), 3)
+
+    def test_list_candidates_denied(self) -> None:
+        """Запрет на получение списка пользователей, не имеющих связанную должность"""
+
+        required_activity = Activity.objects.get(name="Бухгалтер")
+        response = self.client.get(f"/users/candidates/{required_activity.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

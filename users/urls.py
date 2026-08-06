@@ -14,5 +14,6 @@ urlpatterns: list = [
     path("login/", TokenObtainPairView.as_view(), name="login"),
     path("token_refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("change_password/", views.EmployeeChangePasswordAPIView.as_view(), name="change_password"),
+    path("candidates/<int:activity_pk>/", views.CandidatesListView.as_view(), name="candidates"),
 ]
 urlpatterns += router.urls
