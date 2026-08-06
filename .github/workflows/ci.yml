@@ -68,6 +68,8 @@ jobs:
               echo "DB_NAME=test_db" >> .env
               echo "DB_USER=test_user" >> .env
               echo "DB_PASSWORD=test_password" >> .env
+              echo "CORS_ALLOWED_ORIGINS=http://localhost,https://localhost" >> .env
+              echo "CSRF_TRUSTED_ORIGINS=http://localhost,https://localhost" >> .env
 
           - name: Run Migrations
             run: poetry run python manage.py migrate
