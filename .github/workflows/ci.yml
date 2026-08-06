@@ -24,15 +24,6 @@ jobs:
         needs: lint
         runs-on: ubuntu-latest
         services:
-            redis:
-                image: redis:latest
-                ports:
-                  - 6379:6379
-                options: >-
-                  --health-cmd "redis-cli ping"
-                  --health-interval 10s
-                  --health-timeout 5s
-                  --health-retries 5
             db:
                 image: postgres:16
                 env:
@@ -64,12 +55,7 @@ jobs:
 
           - name: Create .env For Tests
             run: |
-              echo "SECRET_KEY=django-secret_test_key" >> .env
-              echo "DB_NAME=test_db" >> .env
-              echo "DB_USER=test_user" >> .env
-              echo "DB_PASSWORD=test_password" >> .env
-              echo "CORS_ALLOWED_ORIGINS=http://localhost,https://localhost" >> .env
-              echo "CSRF_TRUSTED_ORIGINS=http://localhost,https://localhost" >> .env
+              echo "TEST_MODE=True" >> .env
 
           - name: Run Migrations
             run: poetry run python manage.py migrate
