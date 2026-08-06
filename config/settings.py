@@ -146,8 +146,13 @@ CELERY_RESULT_BACKEND = "redis://redis/3"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = os.getenv("CELERY_TASK_TRACK_STARTED", "true").lower() == "true"
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", 600))
-
-CELERY_BEAT_SCHEDULE: dict[str, dict] = dict()
+CHECK_INTERVAL = int(os.getenv("CELERY_EXPIRED_STATUS_CHECK_INTERVAL", 30))
+CELERY_BEAT_SCHEDULE = {
+    "check_dead_line_set_expired": {
+        "task": "management.tasks.check_dead_line_set_expired",
+        "schedule": timedelta(minutes=CHECK_INTERVAL),
+    }
+}
 
 
 if TEST_MODE:
