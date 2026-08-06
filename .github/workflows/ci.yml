@@ -74,10 +74,10 @@ jobs:
             run: echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
 
           - name: Build Docker Image
-            run: docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/favorite-habits:${{ github.sha }} .
+            run: docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }} .
 
           - name: Push Docker Image To Docker Hub
-            run: docker push ${{ secrets.DOCKER_HUB_USERNAME }}/favorite-habits:${{ github.sha }}
+            run: docker push ${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}
 
     deploy:
         needs: build
@@ -91,11 +91,11 @@ jobs:
           - name: Deploy To Server
             run: |
                 ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-                    cd favorite-habits
+                    cd easy-management
                     docker compose down
                     sed -i '/^IMAGE_NAME=/d' .env
-                    echo "IMAGE_NAME=${{ secrets.DOCKER_HUB_USERNAME }}/favorite-habits:${{ github.sha }}" >> .env
-                    docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/favorite-habits:${{ github.sha }}
+                    echo "IMAGE_NAME=${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}" >> .env
+                    docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}
                     docker compose up -d
                     docker image prune -f
                 EOF
