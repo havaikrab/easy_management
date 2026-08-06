@@ -1,6 +1,6 @@
 **
 !config/**
-!habits/**
+!management/**
 !users/**
 !.flake8
 !manage.py
