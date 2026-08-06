@@ -79,23 +79,23 @@ jobs:
           - name: Push Docker Image To Docker Hub
             run: docker push ${{ secrets.DOCKER_HUB_USERNAME }}/favorite-habits:${{ github.sha }}
 
-#    deploy:
-#        needs: build
-#        runs-on: ubuntu-latest
-#        steps:
-#          - name: Set Up SSH
-#            uses: webfactory/ssh-agent@v0.10.0
-#            with:
-#                ssh-private-key: ${{ secrets.SSH_KEY }}
-#
-#          - name: Deploy To Server
-#            run: |
-#                ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-#                    cd favorite-habits
-#                    docker compose down
-#                    sed -i '/^IMAGE_NAME=/d' .env
-#                    echo "IMAGE_NAME=${{ secrets.DOCKER_HUB_USERNAME }}/favorite-habits:${{ github.sha }}" >> .env
-#                    docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/favorite-habits:${{ github.sha }}
-#                    docker compose up -d
-#                    docker image prune -f
-#                EOF
+    deploy:
+        needs: build
+        runs-on: ubuntu-latest
+        steps:
+          - name: Set Up SSH
+            uses: webfactory/ssh-agent@v0.10.0
+            with:
+                ssh-private-key: ${{ secrets.SSH_KEY }}
+
+          - name: Deploy To Server
+            run: |
+                ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+                    cd favorite-habits
+                    docker compose down
+                    sed -i '/^IMAGE_NAME=/d' .env
+                    echo "IMAGE_NAME=${{ secrets.DOCKER_HUB_USERNAME }}/favorite-habits:${{ github.sha }}" >> .env
+                    docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/favorite-habits:${{ github.sha }}
+                    docker compose up -d
+                    docker image prune -f
+                EOF
