@@ -64,7 +64,10 @@ jobs:
 
           - name: Create .env For Tests
             run: |
-              echo "SECRET_KEY: django-secret_test_key" >> .env
+              echo "SECRET_KEY=django-secret_test_key" >> .env
+              echo "DB_NAME=test_db" >> .env
+              echo "DB_USER=test_user" >> .env
+              echo "DB_PASSWORD=test_password" >> .env
 
           - name: Run Migrations
             run: poetry run python manage.py migrate
