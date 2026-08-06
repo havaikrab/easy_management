@@ -36,6 +36,8 @@ jobs:
             db:
                 image: postgres:16
                 env:
+                    DEBUG: True
+                    SECRET_KEY: django-secret_test_key
                     POSTGRES_DB: test_db
                     POSTGRES_USER: test_user
                     POSTGRES_PASSWORD: test_password
