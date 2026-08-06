@@ -36,8 +36,6 @@ jobs:
             db:
                 image: postgres:16
                 env:
-                    DEBUG: True
-                    SECRET_KEY: django-secret_test_key
                     POSTGRES_DB: test_db
                     POSTGRES_USER: test_user
                     POSTGRES_PASSWORD: test_password
@@ -63,6 +61,10 @@ jobs:
 
           - name: Install Dependencies
             run: poetry install --no-root
+
+          - name: Create .env For Tests
+            run: |
+              echo "SECRET_KEY: django-secret_test_key" >> .env
 
           - name: Run Migrations
             run: poetry run python manage.py migrate
