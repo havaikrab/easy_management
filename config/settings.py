@@ -10,6 +10,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 
+TEST_MODE = os.getenv("TEST_MODE", "False").lower() == "true"
+
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 CREATE_SUPER_ADMIN = os.getenv("CREATE_SUPER_ADMIN", "False").lower() == "true"
@@ -74,7 +76,7 @@ DATABASES = {
         "NAME": os.getenv("DB_NAME"),
         "USER": os.getenv("DB_USER"),
         "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": "db",
+        "HOST": os.getenv("DB_HOST", "db"),
         "PORT": "5432",
     }
 }
@@ -139,10 +141,32 @@ else:
 
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": "redis://redis:6379/1"}}
 
-CELERY_BROKER_URL = "redis://redis/2"
-CELERY_RESULT_BACKEND = "redis://redis/3"
+CELERY_BROKER_URL = "redis://redis:6379/2"
+CELERY_RESULT_BACKEND = "redis://redis:6379/3"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = os.getenv("CELERY_TASK_TRACK_STARTED", "true").lower() == "true"
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", 600))
+CHECK_INTERVAL = int(os.getenv("CELERY_EXPIRED_STATUS_CHECK_INTERVAL", 30))
+CELERY_BEAT_SCHEDULE = {
+    "check_dead_line_set_expired": {
+        "task": "management.tasks.check_dead_line_set_expired",
+        "schedule": timedelta(minutes=CHECK_INTERVAL),
+    }
+}
 
-CELERY_BEAT_SCHEDULE: dict[str, dict] = dict()
+
+if TEST_MODE:
+    SECRET_KEY = "django-secret_test_key"
+    DEBUG = True
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql_psycopg2",
+            "NAME": "test_db",
+            "USER": "test_user",
+            "PASSWORD": "test_password",
+            "HOST": "localhost",
+            "PORT": "5432",
+        }
+    }
+    CSRF_TRUSTED_ORIGINS = ["http://localhost", "https://localhost"]
+    CORS_ALLOWED_ORIGINS = ["http://localhost", "https://localhost"]
