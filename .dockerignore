@@ -1,0 +1,8 @@
+**
+!config/**
+!management/**
+!users/**
+!.flake8
+!manage.py
+!poetry.lock
+!pyproject.toml

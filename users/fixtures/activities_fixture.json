@@ -1,0 +1,179 @@
+[
+{
+    "model": "management.activity",
+    "pk": 1,
+    "fields": {
+        "name": "Генеральный директор",
+        "description": "Единственный владелец компании",
+        "partners": [
+            2,
+            3,
+            4,
+            5,
+            9,
+            11
+        ]
+    }
+},
+{
+    "model": "management.activity",
+    "pk": 2,
+    "fields": {
+        "name": "Системный администратор",
+        "description": "Ответственный за поддержание программного обеспечения организации в исправном состоянии",
+        "partners": [
+            1,
+            3,
+            5,
+            9,
+            10
+        ]
+    }
+},
+{
+    "model": "management.activity",
+    "pk": 3,
+    "fields": {
+        "name": "Начальник отдела кадров",
+        "description": "Главный специалист по подбору кадров",
+        "partners": [
+            1,
+            2,
+            4,
+            5,
+            9
+        ]
+    }
+},
+{
+    "model": "management.activity",
+    "pk": 4,
+    "fields": {
+        "name": "Бухгалтер",
+        "description": "Обязанности: ведение финансовой документации",
+        "partners": [
+            1,
+            3,
+            9,
+            11
+        ]
+    }
+},
+{
+    "model": "management.activity",
+    "pk": 5,
+    "fields": {
+        "name": "Инженер-наладчик",
+        "description": "Царь-фиксик",
+        "partners": [
+            1,
+            2,
+            3,
+            6,
+            8,
+            11,
+            12
+        ]
+    }
+},
+{
+    "model": "management.activity",
+    "pk": 6,
+    "fields": {
+        "name": "Оператор ЧПУ",
+        "description": "Оператор металлообрабатывающего станка",
+        "partners": [
+            5,
+            8,
+            9,
+            12
+        ]
+    }
+},
+{
+    "model": "management.activity",
+    "pk": 7,
+    "fields": {
+        "name": "Водитель",
+        "description": "Водитель-универсал",
+        "partners": [
+            9,
+            11
+        ]
+    }
+},
+{
+    "model": "management.activity",
+    "pk": 8,
+    "fields": {
+        "name": "Слесарь",
+        "description": "Трудолюбивый и ответственный сотрудник без вредных привычек",
+        "partners": [
+            5,
+            6,
+            9,
+            12
+        ]
+    }
+},
+{
+    "model": "management.activity",
+    "pk": 9,
+    "fields": {
+        "name": "Менеджер по работе с клиентами",
+        "description": "Коммуникабельный, дружелюбный стрессоустойчивый кадр",
+        "partners": [
+            1,
+            2,
+            3,
+            4,
+            6,
+            7,
+            8,
+            10,
+            11,
+            12
+        ]
+    }
+},
+{
+    "model": "management.activity",
+    "pk": 10,
+    "fields": {
+        "name": "Терминал-распределитель",
+        "description": "Устройство автоматического распределения заявок потребителей между специалистами",
+        "partners": [
+            2,
+            9
+        ]
+    }
+},
+{
+    "model": "management.activity",
+    "pk": 11,
+    "fields": {
+        "name": "Кладовщик",
+        "description": "Ответственный за учет товарно-материальных ценностей",
+        "partners": [
+            4,
+            5,
+            7,
+            9
+        ]
+    }
+},
+{
+    "model": "management.activity",
+    "pk": 12,
+    "fields": {
+        "name": "Столяр",
+        "description": "Столяр-краснодеревщик с золотыми руками",
+        "partners": [
+            5,
+            6,
+            8,
+            9
+        ]
+    }
+}
+]

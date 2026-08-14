@@ -1,0 +1,101 @@
+name: Easy Mnagement CI
+
+on: [push, pull_request]
+
+jobs:
+    lint:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check Out Code
+              uses: actions/checkout@v3
+
+            - name: Set Up Python
+              uses: actions/setup-python@v4
+              with:
+                  python-version: '3.13'
+
+            - name: Install Dependencies
+              run: pip install flake8
+
+            - name: Run Flake8
+              run: flake8 .
+
+    test:
+        needs: lint
+        runs-on: ubuntu-latest
+        services:
+            db:
+                image: postgres:16
+                env:
+                    POSTGRES_DB: test_db
+                    POSTGRES_USER: test_user
+                    POSTGRES_PASSWORD: test_password
+                ports:
+                  - 5432:5432
+                options: >-
+                  --health-cmd "pg_isready -U test_user"
+                  --health-interval 10s
+                  --health-timeout 5s
+                  --health-retries 5
+        steps:
+          - name: Check Out Code
+            uses: actions/checkout@v3
+
+          - name: Install Poetry
+            run: pip install poetry
+
+          - name: Set Up Python
+            uses: actions/setup-python@v4
+            with:
+                python-version: '3.13'
+                cache: 'poetry'
+
+          - name: Install Dependencies
+            run: poetry install --no-root
+
+          - name: Create .env For Tests
+            run: |
+              echo "TEST_MODE=True" >> .env
+
+          - name: Run Migrations
+            run: poetry run python manage.py migrate
+
+          - name: Run Tests
+            run: poetry run python manage.py test
+
+    build:
+        needs: test
+        runs-on: ubuntu-latest
+        steps:
+          - name: Check Out Code
+            uses: actions/checkout@v3
+
+          - name: Log In To Docker Hub
+            run: echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
+
+          - name: Build Docker Image
+            run: docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }} .
+
+          - name: Push Docker Image To Docker Hub
+            run: docker push ${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}
+
+    deploy:
+        needs: build
+        runs-on: ubuntu-latest
+        steps:
+          - name: Set Up SSH
+            uses: webfactory/ssh-agent@v0.10.0
+            with:
+                ssh-private-key: ${{ secrets.SSH_KEY }}
+
+          - name: Deploy To Server
+            run: |
+                ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+                    cd easy-management
+                    docker compose down
+                    sed -i '/^IMAGE_NAME=/d' .env
+                    echo "IMAGE_NAME=${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}" >> .env
+                    docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}
+                    docker compose up -d
+                    docker image prune -f
+                EOF

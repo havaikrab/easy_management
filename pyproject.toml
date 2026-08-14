@@ -6,11 +6,74 @@ authors = [
     {name = "Your Name",email = "you@example.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12,<3.15"
 dependencies = [
+    "django (>=6.0.7,<7.0.0)",
+    "python-dotenv (>=1.2.2,<2.0.0)",
+    "psycopg2-binary (>=2.9.12,<3.0.0)",
+    "djangorestframework (>=3.17.1,<4.0.0)",
+    "djangorestframework-simplejwt (>=5.5.1,<6.0.0)",
+    "unidecode (>=1.4.0,<2.0.0)",
+    "django-filter (>=26.1,<27.0)",
+    "drf-spectacular (>=0.30.0,<0.31.0)",
+    "celery (>=5.6.3,<6.0.0)",
+    "django-celery-beat (>=2.9.0,<3.0.0)",
+    "redis (>=8.1.0,<9.0.0)",
+    "django-cors-headers (>=4.9.0,<5.0.0)",
+    "gunicorn (>=26.0.0,<27.0.0)",
 ]
 
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+lint = [
+    "isort (>=8.0.1,<9.0.0)",
+    "black (>=26.5.1,<27.0.0)",
+    "flake8 (>=7.3.0,<8.0.0)",
+    "mypy (>=2.3.0,<3.0.0)",
+    "django-stubs (>=6.0.7,<7.0.0)",
+    "djangorestframework-stubs (>=3.17.1,<4.0.0)",
+    "types-django-filter (>=26.1.0.20260713,<27.0.0.0)",
+    "celery-types (>=0.26.0,<0.27.0)"
+]
+dev = [
+    "coverage (>=7.15.2,<8.0.0)",
+    "freezegun (>=1.5.5,<2.0.0)"
+]
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+line-length = 119
+exclude = '''
+/(
+\.venv|
+\.git|
+\.mypy_cache|
+\.pytest_cache|
+build|
+dist
+venv
+)/
+'''
+
+[tool.mypy]
+disallow_untyped_defs = true
+warn_return_any = true
+exclude_gitignore = true
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "*/migrations/*",
+    "users/tests.py",
+    "management/tests.py",
+    "manage.py",
+    "*/wsgi.py",
+    "*/asgi.py",
+    "*/apps.py",
+]

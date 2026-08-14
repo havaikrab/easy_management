@@ -1,0 +1,30 @@
+[
+{
+    "model": "users.employee_user_permissions",
+    "pk": 1,
+    "fields": {
+        "employee": [
+            "7748IrIrde5b"
+        ],
+        "permission": [
+            "view_activity",
+            "management",
+            "activity"
+        ]
+    }
+},
+{
+    "model": "users.employee_user_permissions",
+    "pk": 2,
+    "fields": {
+        "employee": [
+            "7748IrIrde5b"
+        ],
+        "permission": [
+            "add_activity",
+            "management",
+            "activity"
+        ]
+    }
+}
+]
