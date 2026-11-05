@@ -350,6 +350,7 @@ class QuestSpecialTestCase(APITestCase):
         self.user = Employee.objects.get(username="8024IvIvc0e0")
         self.client.force_authenticate(user=self.user)
 
+    @freeze_time("2026-07-31T19:45:00.0Z")
     def test_quest_dead_line_validator(self) -> None:
         """Проверка валидатора поля dead_line"""
 
@@ -372,7 +373,6 @@ class QuestSpecialTestCase(APITestCase):
         response_2 = self.client.patch("/quests/6/", data=quest_data)
 
         self.assertEqual(response_2.status_code, status.HTTP_403_FORBIDDEN)
-
         self.assertEqual(len(Quest.objects.all()), 11)
         self.assertEqual(
             "Для изменения объекта задачи нужно быть ее создателем или исполнителем" in str(response_2.data),
@@ -421,6 +421,7 @@ class QuestSpecialTestCase(APITestCase):
         response_5 = self.client.patch(f"/quests/{new_quest.pk}/", data={"required": 10, "operator": 11})
         self.assertEqual(response_5.status_code, status.HTTP_400_BAD_REQUEST)
 
+    @freeze_time("2026-07-31T19:45:00.0Z")
     def test_getting_operators_with_quests(self) -> None:
         """Тест функции get_operators_with_quests"""
 
@@ -513,6 +514,7 @@ class QuestTransferResponsibilityCase(APITestCase):
         self.user = Employee.objects.get(username="8064AlAla551")
         self.client.force_authenticate(user=self.user)
 
+    @freeze_time("2026-07-31T19:45:00.0Z")
     def test_quest_division(self) -> None:
         """Тест функции автоматического назначения исполнителя задачи"""
 
@@ -541,6 +543,7 @@ class QuestTransferResponsibilityCase(APITestCase):
 
         self.assertEqual((len(new_tasks), len(self_user_tasks), len(user_6_tasks)), (4, 2, 2))
 
+    @freeze_time("2026-07-30T15:35:00.0Z")
     def test_quest_auto_sabotaged_status(self) -> None:
         """Создание задачи для несуществующего сотрудника"""
 
@@ -581,6 +584,7 @@ class QuestCommonEmployeeTestCase(APITestCase):
             {"Запустить производство", "Выдать комплектующие", "Подготовить место для сборки оборудования"},
         )
 
+    @freeze_time("2026-07-30T15:35:00.0Z")
     def test_cyclic_dependence_exception(self) -> None:
         """Исключение циклической зависимости при замене задачи-родителя"""
 
