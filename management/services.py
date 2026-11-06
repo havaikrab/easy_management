@@ -1,6 +1,7 @@
-from typing import Any
+from collections import defaultdict
+from typing import Any, Optional
 
-from django.db.models import Q, QuerySet
+from django.db.models import Q
 
 from management.models import Activity, Quest
 from users.models import Employee
@@ -16,32 +17,30 @@ def get_operators_with_quests_for_activities(
         readiness_status = "ready_to_work"
     else:
         readiness_status = "not_available"
+    # Всего 2 запроса к БД независимо от количества должностей: сотрудники и их задачи загружаются разом
+    # и раскладываются по должностям в памяти
+    activities_dict: dict[str, dict[str, Any]] = {str(activity.pk): dict() for activity in activities_list}
     requested_operators = Employee.objects.filter(activity__in=activities_list, readiness=readiness_status)
-    quests = Quest.objects.filter(operator__in=requested_operators)
-    activities_dict = dict()
-    for activity in activities_list:
-        activity_employees = requested_operators.filter(activity=activity)
-        operators: dict[str, Any] = {
-            str(operator.pk): {"object": operator, "quests": list()} for operator in activity_employees
-        }
-        if len(operators) > 0:
-            requested_tasks = quests.filter(
-                status__in=quest_statuses,
-                required=activity,
-                operator__isnull=False,
-                operator__readiness=readiness_status,
-            )
-            for quest in requested_tasks:
-                quest_operator = quest.operator
-                operators[str(quest_operator.pk)]["quests"].append(quest)
-        activities_dict[str(activity.pk)] = operators
+    for operator in requested_operators:
+        activities_dict[str(operator.activity_id)][str(operator.pk)] = {"object": operator, "quests": list()}
+    if any(activities_dict.values()):
+        requested_tasks = Quest.objects.filter(
+            status__in=quest_statuses,
+            required__in=activities_list,
+            operator__in=requested_operators,
+        )
+        for quest in requested_tasks:
+            # Исполнитель учитывается только в должности, которую требует задача
+            operator_data = activities_dict[str(quest.required_id)].get(str(quest.operator_id))
+            if operator_data is not None:
+                operator_data["quests"].append(quest)
     return activities_dict
 
 
 def get_candidates_for_important_quest(quest: Quest, activities_data: dict) -> list:
     """Возвращает список, потенциальных исполнителей задачи вместе со списками их текущих задач"""
 
-    relevant_operators = activities_data.get(str(quest.required.pk), dict())
+    relevant_operators = activities_data.get(str(quest.required_id), dict())
     if len(relevant_operators) > 0:
         if len(relevant_operators) > 1:
             less_busy = min(relevant_operators.values(), key=lambda pk: len(pk["quests"]))["object"]
@@ -77,10 +76,11 @@ def get_candidates_names(quest: Quest, activities_data: dict) -> list:
 def get_important_quests_with_candidates() -> list:
     """Возвращает список невыполняемых важных задач с соответствующими списками имен потенциальных исполнителей"""
 
+    # related_quest и ее исполнитель нужны для подбора кандидатов, join избавляет от запросов в цикле
     stopped_quests = Quest.objects.filter(Q(operator__isnull=True) | Q(status="3_sabotaged")).select_related(
-        "required"
+        "related_quest__operator"
     )
-    activity_ids = list(set([quest.required.pk for quest in stopped_quests]))
+    activity_ids = list(set([quest.required_id for quest in stopped_quests]))
     required_activities = list(Activity.objects.filter(pk__in=activity_ids))
     activities_data = get_operators_with_quests_for_activities(
         required_activities, ["1_created", "2_processing", "3_sabotaged"]
@@ -124,28 +124,31 @@ def set_activity_relation(patron: Activity, arrived: Activity) -> None:
         patron.partners.add(arrived)
 
 
-def get_quest_child_tree(quest: Quest, queryset: QuerySet) -> dict:
-    """Возвращает словарь с характеристикой задачи и структурой ее подзадач"""
+def get_employee_label(employee: Optional[Employee]) -> str:
+    """Возвращает строку вида "Должность: Фамилия Имя" или пометку, если сотрудник не указан"""
 
-    path_with_parent = f"{quest.path_to_root}{quest.pk}/"
+    if employee is None:
+        return "Не назначен"
+    return f"{employee.activity.name}: {employee.last_name} {employee.first_name}"
+
+
+def get_quest_child_tree(quest: Quest, children_map: dict[int, list[Quest]]) -> dict:
+    """Возвращает словарь с характеристикой задачи и структурой ее подзадач.
+    children_map - словарь вида {id задачи-родителя: список ее непосредственных подзадач}"""
+
     return {
         "quest": {
             "title": quest.title,
             "description": quest.description,
-            "creator": f"{quest.creator.activity.name}: {quest.creator.last_name} {quest.creator.first_name}",
-            "operator": f"{quest.operator.activity.name}: {quest.operator.last_name} {quest.operator.first_name}",
+            "creator": get_employee_label(quest.creator),
+            "operator": get_employee_label(quest.operator),
             "created_at": str(quest.created_at),
             "dead_line": str(quest.dead_line),
             "status": quest.status,
             "report": quest.report,
             "path_to_root": quest.path_to_root,
         },
-        "sub_quests": {
-            str(sub.pk): get_quest_child_tree(
-                sub, queryset.filter(path_to_root__startswith=f"{path_with_parent}{sub.pk}/")
-            )
-            for sub in queryset.filter(related_quest__pk=quest.pk)
-        },
+        "sub_quests": {str(sub.pk): get_quest_child_tree(sub, children_map) for sub in children_map.get(quest.pk, [])},
     }
 
 
@@ -154,5 +157,13 @@ def get_sub_quests_map(quest: Quest) -> dict:
     возвращает подробную карту зависимостей этих задач"""
 
     path_with_parent = f"{quest.path_to_root}{quest.pk}/"
-    queryset = Quest.objects.filter(path_to_root__startswith=path_with_parent)
-    return get_quest_child_tree(quest, queryset)
+    # Все подзадачи (на любой глубине) загружаются одним запросом вместе с создателями и исполнителями,
+    # дерево собирается в памяти. Раньше на каждый узел дерева выполнялось несколько отдельных запросов
+    sub_quests = Quest.objects.filter(path_to_root__startswith=path_with_parent).select_related(
+        "creator__activity", "operator__activity"
+    )
+    children_map: dict[int, list[Quest]] = defaultdict(list)
+    for sub in sub_quests:
+        if sub.related_quest_id is not None:
+            children_map[sub.related_quest_id].append(sub)
+    return get_quest_child_tree(quest, children_map)

@@ -22,7 +22,10 @@ SUPER_FIRST_NAME = os.getenv("SUPER_FIRST_NAME")
 SUPER_FATHER_NAME = os.getenv("SUPER_FATHER_NAME")
 SUPER_PASSWORD = os.getenv("SUPER_PASSWORD")
 
-ALLOWED_HOSTS = ["*"]
+# Допустимые значения заголовка Host. Запросы с другим Host Django отклоняет (ошибка 400)
+ALLOWED_HOSTS = [
+    host.strip() for host in (os.getenv("ALLOWED_HOSTS") or "localhost,127.0.0.1").split(",") if host.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -108,6 +111,12 @@ REST_FRAMEWORK = {
         "rest_framework.filters.OrderingFilter",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Лимиты частоты запросов. Счетчики хранятся в кэше (Redis), поэтому общие для всех процессов gunicorn.
+    # Ограничение включается только на тех контроллерах, где указан throttle_classes (сейчас - вход в систему)
+    "DEFAULT_THROTTLE_RATES": {"login": os.getenv("LOGIN_THROTTLE_RATE") or "10/minute"},
+    # Количество прокси-серверов (nginx) перед приложением. Нужно, чтобы лимит считался по адресу клиента, а не nginx.
+    # 0 - прокси нет, адрес берется из соединения. В продакшене значение 1 задает deploy/docker-compose.yml
+    "NUM_PROXIES": int(os.getenv("NUM_PROXIES") or 0),
 }
 
 SIMPLE_JWT = {
@@ -163,6 +172,9 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 
+# Тестовые данные (manage.py test и loaddata) лежат в одной общей папке, а не в каждом приложении
+FIXTURE_DIRS = [BASE_DIR / "fixtures"]
+
 if TEST_MODE:
     SECRET_KEY = "django-secret_test_key"
     DEBUG = True
@@ -180,3 +192,5 @@ if TEST_MODE:
     }
     CSRF_TRUSTED_ORIGINS = ["http://localhost", "https://localhost"]
     CORS_ALLOWED_ORIGINS = ["http://localhost", "https://localhost"]
+    # В тестах Redis недоступен (в CI его нет), а кэш нужен счетчикам ограничения частоты запросов
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}

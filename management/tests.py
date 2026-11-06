@@ -660,6 +660,26 @@ class QuestAnalysisTestCase(APITestCase):
             dict(),
         )
 
+    def test_quest_tree_single_query(self) -> None:
+        """Дерево подзадач любой глубины загружается одним запросом"""
+
+        quest = Quest.objects.select_related("creator__activity", "operator__activity").get(
+            title__startswith="Запустить"
+        )
+        with self.assertNumQueries(1):
+            tree = get_sub_quests_map(quest)
+
+        self.assertTrue(tree["sub_quests"])
+
+    def test_operators_with_quests_two_queries(self) -> None:
+        """Сотрудники и задачи нескольких должностей загружаются двумя запросами"""
+
+        activities = list(Activity.objects.all())
+        with self.assertNumQueries(2):
+            data = get_operators_with_quests_for_activities(activities, ["1_created", "2_processing"])
+
+        self.assertEqual(set(data.keys()), {str(activity.pk) for activity in activities})
+
     def test_tree_requests(self) -> None:
         """Запросы на получение дерева зависимостей задач"""
 

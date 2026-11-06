@@ -27,7 +27,7 @@ def get_sorted_range_from_activ_operators(activity: Activity, reverse: bool = Fa
         operator_data = {
             "id": operator.pk,
             "username": operator.username,
-            "activity": operator.activity.name,
+            "activity": activity.name,
             "full_name": f"{operator.last_name} {operator.first_name}",
         }
         value["operator"] = operator_data

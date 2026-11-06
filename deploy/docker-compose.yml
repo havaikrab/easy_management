@@ -51,6 +51,11 @@ services:
         image: ${IMAGE_NAME}
         env_file:
             - .env
+        environment:
+            # Перед приложением стоит один прокси (nginx): по заголовку X-Forwarded-For определяется реальный адрес
+            # клиента для ограничения частоты запросов. Без этого все клиенты имели бы адрес контейнера nginx
+            # и делили один общий лимит
+            NUM_PROXIES: "1"
         volumes:
             - static_volume:/app/staticfiles
         # expose открывает порт только для контейнеров внутри сети compose (nginx). Снаружи приложение доступно

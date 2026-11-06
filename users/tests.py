@@ -1,6 +1,8 @@
+from django.core.cache import cache
 from django.core.management import call_command
 from django.test import override_settings
 from rest_framework import status
+from rest_framework.settings import api_settings
 from rest_framework.test import APITestCase
 
 from management.models import Activity, Quest
@@ -307,3 +309,49 @@ class GetActiveOperatorsTestCase(APITestCase):
         response = self.client.get(f"/users/candidates/{required_activity.pk}/")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_candidates_queries_do_not_depend_on_operators_count(self) -> None:
+        """Число запросов к БД не растет с количеством сотрудников и задач"""
+
+        required_activity = Activity.objects.get(name="Слесарь")
+        # 3 служебных запроса (должность из URL, должность пользователя, проверка связи между ними)
+        # и 2 запроса данных (сотрудники и их задачи)
+        with self.assertNumQueries(5):
+            response = self.client.get(f"/users/candidates/{required_activity.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class LoginThrottleTestCase(APITestCase):
+    """Ограничение частоты запросов на вход в систему"""
+
+    def setUp(self) -> None:
+        """Счетчики запросов хранятся в кэше, поэтому он очищается до и после каждого теста"""
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def test_login_is_throttled(self) -> None:
+        """После превышения лимита неудачных попыток входа сервер отвечает 429"""
+
+        credentials = {"username": "unknown", "password": "wrong_password"}
+        limit = int(api_settings.DEFAULT_THROTTLE_RATES["login"].split("/")[0])
+        for _ in range(limit):
+            response = self.client.post("/users/login/", credentials)
+            self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        blocked_response = self.client.post("/users/login/", credentials)
+
+        self.assertEqual(blocked_response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_throttle_uses_client_ip(self) -> None:
+        """Лимит считается отдельно для каждого IP-адреса клиента"""
+
+        credentials = {"username": "unknown", "password": "wrong_password"}
+        limit = int(api_settings.DEFAULT_THROTTLE_RATES["login"].split("/")[0])
+        for _ in range(limit + 1):
+            self.client.post("/users/login/", credentials, REMOTE_ADDR="10.0.0.1")
+        blocked_response = self.client.post("/users/login/", credentials, REMOTE_ADDR="10.0.0.1")
+        other_client_response = self.client.post("/users/login/", credentials, REMOTE_ADDR="10.0.0.2")
+
+        self.assertEqual(blocked_response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(other_client_response.status_code, status.HTTP_401_UNAUTHORIZED)
