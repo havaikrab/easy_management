@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -161,11 +161,13 @@ if TEST_MODE:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql_psycopg2",
-            "NAME": "test_db",
-            "USER": "test_user",
-            "PASSWORD": "test_password",
+            # Django создает отдельную БД test_<NAME> и удаляет ее после тестов, рабочая БД не затрагивается.
+            # Значения по умолчанию соответствуют сервису postgres в CI, где файла .env и переменных DB_* нет
+            "NAME": os.getenv("DB_NAME") or "test_db",
+            "USER": os.getenv("DB_USER") or "test_user",
+            "PASSWORD": os.getenv("DB_PASSWORD") or "test_password",
             "HOST": "localhost",
-            "PORT": "5432",
+            "PORT": os.getenv("DB_PORT") or "5432",
         }
     }
     CSRF_TRUSTED_ORIGINS = ["http://localhost", "https://localhost"]
