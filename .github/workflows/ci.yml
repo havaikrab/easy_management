@@ -1,28 +1,60 @@
-name: Easy Mnagement CI
+name: Easy Management CI
 
-on: [push, pull_request]
+on:
+    # Push в любую ветку (теги не запускают CI). Merge PR в main - это тоже push в main
+    push:
+        branches: ['**']
+    # PR в main: открытие, новый коммит в ветке PR, переоткрытие
+    pull_request:
+        branches: [main]
+
+# Push и PR имеют разный github.ref (refs/heads/<ветка> и refs/pull/<N>/merge), поэтому друг друга не отменяют.
+# Устаревшие запуски отменяются везде, кроме main, чтобы не прервать идущий деплой
+concurrency:
+    group: ci-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+    contents: read
 
 jobs:
     lint:
         runs-on: ubuntu-latest
+        timeout-minutes: 10
         steps:
             - name: Check Out Code
-              uses: actions/checkout@v3
+              uses: actions/checkout@v4
 
             - name: Set Up Python
-              uses: actions/setup-python@v4
+              uses: actions/setup-python@v5
               with:
                   python-version: '3.13'
 
+            - name: Install Poetry
+              run: pip install poetry
+
+            - name: Cache Poetry Packages
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cache/pypoetry
+                  key: poetry-${{ runner.os }}-3.13-${{ hashFiles('poetry.lock') }}
+
+            # Для линтеров зависимости проекта не нужны, ставим только группу lint
             - name: Install Dependencies
-              run: pip install flake8
+              run: poetry install --no-root --only lint
 
             - name: Run Flake8
-              run: flake8 .
+              run: poetry run flake8 .
+
+            - name: Run Black
+              run: poetry run black --check .
 
     test:
-        needs: lint
         runs-on: ubuntu-latest
+        timeout-minutes: 15
+        env:
+            # settings.py переключается на тестовые параметры БД (localhost, test_db)
+            TEST_MODE: 'True'
         services:
             db:
                 image: postgres:16
@@ -31,71 +63,124 @@ jobs:
                     POSTGRES_USER: test_user
                     POSTGRES_PASSWORD: test_password
                 ports:
-                  - 5432:5432
+                    - 5432:5432
                 options: >-
-                  --health-cmd "pg_isready -U test_user"
-                  --health-interval 10s
-                  --health-timeout 5s
-                  --health-retries 5
+                    --health-cmd "pg_isready -U test_user"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
         steps:
-          - name: Check Out Code
-            uses: actions/checkout@v3
+            - name: Check Out Code
+              uses: actions/checkout@v4
 
-          - name: Install Poetry
-            run: pip install poetry
+            - name: Set Up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: '3.13'
 
-          - name: Set Up Python
-            uses: actions/setup-python@v4
-            with:
-                python-version: '3.13'
-                cache: 'poetry'
+            - name: Install Poetry
+              run: pip install poetry
 
-          - name: Install Dependencies
-            run: poetry install --no-root
+            - name: Cache Poetry Packages
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cache/pypoetry
+                  key: poetry-${{ runner.os }}-3.13-${{ hashFiles('poetry.lock') }}
 
-          - name: Create .env For Tests
-            run: |
-              echo "TEST_MODE=True" >> .env
+            - name: Install Dependencies
+              run: poetry install --no-root
 
-          - name: Run Migrations
-            run: poetry run python manage.py migrate
+            # Отдельный migrate не нужен: manage.py test сам создает тестовую БД и применяет миграции
+            - name: Run Tests
+              run: poetry run python manage.py test
 
-          - name: Run Tests
-            run: poetry run python manage.py test
-
+    # Ветка без PR: сборка пропускается. PR в main: сборка без публикации. Push в main: сборка и публикация
     build:
-        needs: test
+        needs: [lint, test]
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         runs-on: ubuntu-latest
+        timeout-minutes: 20
+        outputs:
+            published: ${{ steps.result.outputs.published }}
+        env:
+            # secrets нельзя использовать в if напрямую, поэтому пробрасываем через env
+            DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+            DOCKER_HUB_ACCESS_TOKEN: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+            # Публикуем образ только из main и только если заданы секреты Docker Hub
+            PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.DOCKER_HUB_USERNAME != '' && secrets.DOCKER_HUB_ACCESS_TOKEN != '' }}
         steps:
-          - name: Check Out Code
-            uses: actions/checkout@v3
+            - name: Check Out Code
+              uses: actions/checkout@v4
 
-          - name: Log In To Docker Hub
-            run: echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
+            - name: Set Up Docker Buildx
+              uses: docker/setup-buildx-action@v3
 
-          - name: Build Docker Image
-            run: docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }} .
+            - name: Log In To Docker Hub
+              if: env.PUBLISH == 'true'
+              uses: docker/login-action@v3
+              with:
+                  username: ${{ env.DOCKER_HUB_USERNAME }}
+                  password: ${{ env.DOCKER_HUB_ACCESS_TOKEN }}
 
-          - name: Push Docker Image To Docker Hub
-            run: docker push ${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}
+            # Без публикации образ только собирается, чтобы проверить Dockerfile
+            - name: Build Docker Image
+              uses: docker/build-push-action@v6
+              with:
+                  context: .
+                  push: ${{ env.PUBLISH == 'true' }}
+                  tags: ${{ secrets.DOCKER_HUB_USERNAME || 'local' }}/easy-management:${{ github.sha }}
+                  cache-from: type=gha
+                  cache-to: type=gha,mode=max
 
+            # Сообщаем job'у deploy, что образ действительно опубликован в Docker Hub
+            - name: Mark Image As Published
+              id: result
+              if: env.PUBLISH == 'true'
+              run: echo "published=true" >> "$GITHUB_OUTPUT"
+
+    # Деплой выполняется только при push в main, если образ опубликован и в
+    # Settings -> Secrets and variables -> Actions -> Variables задана переменная DEPLOY_ENABLED=true.
+    # Требуются секреты: DOCKER_HUB_USERNAME, DOCKER_HUB_ACCESS_TOKEN, SSH_KEY, SSH_USER, SERVER_IP, SSH_KNOWN_HOSTS
+    # (SSH_KNOWN_HOSTS получить командой: ssh-keyscan -H <SERVER_IP>)
     deploy:
         needs: build
+        if: >-
+            github.event_name == 'push' && github.ref == 'refs/heads/main'
+            && needs.build.outputs.published == 'true'
+            && vars.DEPLOY_ENABLED == 'true'
         runs-on: ubuntu-latest
+        timeout-minutes: 15
+        environment: production
+        concurrency:
+            group: deploy-production
+            cancel-in-progress: false
         steps:
-          - name: Set Up SSH
-            uses: webfactory/ssh-agent@v0.10.0
-            with:
-                ssh-private-key: ${{ secrets.SSH_KEY }}
+            - name: Check Out Code
+              uses: actions/checkout@v4
 
-          - name: Deploy To Server
-            run: |
-                ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-                    cd easy-management
-                    docker compose down
-                    sed -i '/^IMAGE_NAME=/d' .env
-                    echo "IMAGE_NAME=${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}" >> .env
-                    docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}
-                    docker compose up -d
-                    docker image prune -f
-                EOF
+            - name: Set Up SSH
+              uses: webfactory/ssh-agent@v0.10.0
+              with:
+                  ssh-private-key: ${{ secrets.SSH_KEY }}
+
+            - name: Add Server To Known Hosts
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+
+            # Конфигурация compose и nginx лежит в репозитории, поэтому синхронизируем ее с сервером
+            - name: Copy Deploy Files To Server
+              run: |
+                  scp -r deploy/. ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:easy-management/
+
+            - name: Deploy To Server
+              run: |
+                  ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+                      set -e
+                      cd easy-management
+                      sed -i '/^IMAGE_NAME=/d' .env
+                      echo "IMAGE_NAME=${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}" >> .env
+                      docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}
+                      docker compose up -d --remove-orphans
+                      docker image prune -f
+                  EOF
