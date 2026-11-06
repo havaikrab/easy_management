@@ -90,11 +90,26 @@ SUPER_PASSWORD=<ваш пароль>
 
 В репозитории 47 тестов. Для их запуска нужен PostgreSQL. Параметры тестового окружения (версия БД, переменные) см. в [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
+Тестовый режим включается переменной окружения `TEST_MODE=True`. В нём приложение подключается к PostgreSQL на `localhost`, а `DB_NAME`, `DB_USER`, `DB_PASSWORD` и `DB_PORT` берёт из `.env` (если они не заданы, используются `test_db`, `test_user`, `test_password` и `5432`, как в сервисе PostgreSQL в CI). `DB_HOST` в тестовом режиме игнорируется. Django создаёт отдельную БД `test_<DB_NAME>` и удаляет её после тестов, рабочая БД не затрагивается. Пользователю БД нужно право создавать базы (`CREATEDB`). В CI переменная задаётся автоматически. В `.env` её указывать **не нужно**, и тем более нельзя включать на продакшене: она подставляет известный `SECRET_KEY` и включает `DEBUG`.
+
+Локально переменную задают только на время запуска тестов:
+
+```bash
+# Linux / macOS / Git Bash
+TEST_MODE=True poetry run python manage.py test
+```
+
+```powershell
+# PowerShell: переменная удаляется даже если тесты упали или запуск прерван
+try { $env:TEST_MODE="True"; poetry run python manage.py test } finally { Remove-Item Env:TEST_MODE -ErrorAction SilentlyContinue }
+```
+
+Проверка кода:
+
 ```bash
 poetry install
 poetry run flake8 .
 poetry run black --check .
-poetry run python manage.py test
 ```
 
 ## CI/CD
