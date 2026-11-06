@@ -182,5 +182,8 @@ jobs:
                       echo "IMAGE_NAME=${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}" >> .env
                       docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/easy-management:${{ github.sha }}
                       docker compose up -d --remove-orphans
+                      # nginx.conf смонтирован в контейнер как файл: если изменился только он, compose не пересоздает
+                      # контейнер, и nginx продолжает работать со старым конфигом. Принудительное пересоздание применяет его
+                      docker compose up -d --force-recreate nginx
                       docker image prune -f
                   EOF

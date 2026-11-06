@@ -31,7 +31,7 @@ Python 3.13, Django 6, Django REST Framework, SimpleJWT, django-filter, drf-spec
    cd easy_management
    cp .env_template .env
    ```
-2. Заполните в `.env` как минимум `SECRET_KEY`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` и данные первого суперпользователя (см. ниже).
+2. Заполните в `.env` как минимум `SECRET_KEY`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` и данные первого суперпользователя (см. ниже). Переменные без значения в шаблоне обязательны, у остальных уже стоят значения по умолчанию. Комментарии в `.env` пишите на отдельных строках: всё, что стоит после `=` в строке переменной (включая `# комментарий`), считается значением.
 3. Запустите контейнеры:
    ```bash
    docker compose up -d
@@ -39,6 +39,18 @@ Python 3.13, Django 6, Django REST Framework, SimpleJWT, django-filter, drf-spec
 4. Откройте документацию API: <http://localhost:8000/api/schema/swagger-ui/> (ReDoc: `/api/schema/redoc/`, админ-панель: `/admin/`).
 
 В режиме разработки сервис запускается на встроенном сервере Django. Compose поднимает PostgreSQL, Redis, Celery worker, Celery beat и веб-приложение.
+
+Порты dev-конфигурации. Формат записи в compose: `"адрес:порт_на_компьютере:порт_в_контейнере"`.
+
+| Сервис | Адрес на компьютере | Зачем |
+|---|---|---|
+| веб-приложение | `localhost:8000` | API и документация |
+| PostgreSQL | `127.0.0.1:${DB_PORT}` (по умолчанию 5432) | pgAdmin, psql, локальный запуск тестов |
+| Redis | `127.0.0.1:${REDIS_PORT}` (по умолчанию 6379) | отладка через `redis-cli` |
+
+БД и Redis привязаны к `127.0.0.1`, то есть доступны только с вашего компьютера, но не из локальной сети. Контейнеры внутри compose обращаются друг к другу по имени сервиса (`db`, `redis`) и внутренним портам, поэтому публикация портов нужна только для внешних программ. Адреса Redis в `.env` задавать не нужно: по умолчанию используются адреса сети compose (`CACHE_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` нужны только при запуске вне docker).
+
+Если порт на компьютере занят (например, установлен свой PostgreSQL), измените `DB_PORT` в `.env` (для Redis используйте переменную `REDIS_PORT`, она не входит в шаблон).
 
 ### Первый суперпользователь
 
@@ -86,9 +98,13 @@ SUPER_PASSWORD=<ваш пароль>
 
 Полное описание параметров и примеров запросов находится в Swagger UI.
 
+### Ограничение частоты запросов на вход
+
+`POST /users/login/` ограничен по IP-адресу клиента (по умолчанию 10 запросов в минуту), чтобы нельзя было перебирать пароли. При превышении лимита сервер отвечает `429 Too Many Requests`. Лимит меняется переменной `LOGIN_THROTTLE_RATE` (формат `число/интервал`, например `30/hour`). Счётчики хранятся в Redis, поэтому общие для всех процессов Gunicorn. В продакшене nginx передаёт адрес клиента в `X-Forwarded-For`, а `NUM_PROXIES=1` в `deploy/docker-compose.yml` заставляет Django учитывать этот заголовок. Без этой настройки все клиенты делили бы один общий лимит.
+
 ## Тесты и качество кода
 
-В репозитории 47 тестов. Для их запуска нужен PostgreSQL. Параметры тестового окружения (версия БД, переменные) см. в [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+В репозитории 52 теста. Для их запуска нужен PostgreSQL. Параметры тестового окружения (версия БД, переменные) см. в [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 Тестовый режим включается переменной окружения `TEST_MODE=True`. В нём приложение подключается к PostgreSQL на `localhost`, а `DB_NAME`, `DB_USER`, `DB_PASSWORD` и `DB_PORT` берёт из `.env` (если они не заданы, используются `test_db`, `test_user`, `test_password` и `5432`, как в сервисе PostgreSQL в CI). `DB_HOST` в тестовом режиме игнорируется. Django создаёт отдельную БД `test_<DB_NAME>` и удаляет её после тестов, рабочая БД не затрагивается. Пользователю БД нужно право создавать базы (`CREATEDB`). В CI переменная задаётся автоматически. В `.env` её указывать **не нужно**, и тем более нельзя включать на продакшене: она подставляет известный `SECRET_KEY` и включает `DEBUG`.
 
@@ -103,6 +119,24 @@ TEST_MODE=True poetry run python manage.py test
 # PowerShell: переменная удаляется даже если тесты упали или запуск прерван
 try { $env:TEST_MODE="True"; poetry run python manage.py test } finally { Remove-Item Env:TEST_MODE -ErrorAction SilentlyContinue }
 ```
+
+Тесты с измерением покрытия (пакет `coverage` входит в группу `dev`, настройки лежат в `pyproject.toml`):
+
+```bash
+# Linux / macOS / Git Bash
+TEST_MODE=True poetry run coverage run manage.py test
+poetry run coverage report -m   # таблица в консоли, в колонке Missing номера строк без тестов
+poetry run coverage html        # подробный отчет в папке htmlcov/ (откройте htmlcov/index.html)
+```
+
+```powershell
+# PowerShell
+try { $env:TEST_MODE="True"; poetry run coverage run manage.py test } finally { Remove-Item Env:TEST_MODE -ErrorAction SilentlyContinue }
+poetry run coverage report -m
+poetry run coverage html
+```
+
+Папка `htmlcov/` и файл `.coverage` исключены из git.
 
 Проверка кода:
 
@@ -155,9 +189,18 @@ Variables (Settings → Secrets and variables → Actions → Variables):
 2. Создайте рядом файл `.env` (шаблон: `.env_template`) и укажите `IMAGE_NAME` с именем образа.
 3. Выполните `docker compose up -d`.
 
-При автоматическом деплое через CI файлы из `deploy/` копируются на сервер в директорию `~/easy-management/`, а в `.env` обновляется только `IMAGE_NAME`. Остальные значения в `.env` (ключи, пароли БД, CORS) нужно создать на сервере вручную до первого деплоя. Также на сервере должен быть установлен Docker.
+В продакшен-конфигурации приложение работает под Gunicorn за nginx. Снаружи доступен только порт 80 (nginx), БД, Redis и Gunicorn наружу не публикуются. Для доступа с внешнего адреса укажите в `.env` `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS` и `CSRF_TRUSTED_ORIGINS`. Если не добавить адрес сервера в `ALLOWED_HOSTS`, Django ответит на все запросы ошибкой 400.
 
-В продакшен-конфигурации приложение работает под Gunicorn за nginx. Для доступа с внешнего адреса укажите `CORS_ALLOWED_ORIGINS` и `CSRF_TRUSTED_ORIGINS`.
+### Первичная настройка сервера для автоматического деплоя
+
+Файл `.env` содержит секреты и в репозиторий не попадает, поэтому его создают на сервере вручную до первого деплоя:
+
+1. Установите Docker с плагином compose.
+2. В домашней директории пользователя `SSH_USER` создайте папку `easy-management`: деплой копирует файлы и выполняет команды относительно этой директории.
+3. Положите в неё `.env` по образцу `.env_template` и заполните обязательные значения: `SECRET_KEY`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, данные суперпользователя, а также `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS` и `CSRF_TRUSTED_ORIGINS` с реальным адресом сервера. `IMAGE_NAME` указывать не нужно, деплой записывает его сам.
+4. В репозитории GitHub задайте переменную `DEPLOY_ENABLED=true` и секреты из раздела «Настройка репозитория», затем выполните push в `main`.
+
+При каждом деплое файлы из `deploy/` копируются в `~/easy-management/`, в `.env` обновляется только `IMAGE_NAME`, а контейнер nginx пересоздаётся, чтобы применить изменения `nginx.conf`.
 
 ## Структура проекта
 
@@ -165,6 +208,7 @@ Variables (Settings → Secrets and variables → Actions → Variables):
 config/        настройки Django, Celery, корневые URL
 management/    должности и задачи: модели, права, сервисы, Celery-задачи
 users/         сотрудники, JWT, команда set_super_user
+fixtures/      тестовые данные (должности, сотрудники, задачи), общие для тестов обоих приложений
 deploy/        docker-compose и nginx для продакшена
 ```
 

@@ -76,7 +76,8 @@ from .services import get_important_quests_with_candidates, get_sub_quests_map
 class ActivityViewSet(ModelViewSet):
     """Вьюсет для модели должности"""
 
-    queryset = Activity.objects.all()
+    # Сериализатор выводит список связанных должностей (partners): prefetch загружает их одним запросом на всю страницу
+    queryset = Activity.objects.prefetch_related("partners")
     serializer_class = ActivitySerializer
     search_fields = ["name", "description"]
 
@@ -193,14 +194,29 @@ class QuestViewSet(ModelViewSet):
         """Ограничение набора отображаемых задач"""
 
         user = cast(Employee, self.request.user)
-        if user.is_superuser:
-            return Quest.objects.all()
-        return Quest.objects.filter(Q(operator=user) | Q(creator=user))
+        queryset = Quest.objects.all()
+        if not user.is_superuser:
+            queryset = queryset.filter(Q(operator=user) | Q(creator=user))
+        if self.action == "list":
+            # Сериализатор списка выводит исполнителя и должность: без join на каждую задачу уходило бы по 2 запроса
+            queryset = queryset.select_related("operator", "required")
+        return queryset
+
+    def get_object(self) -> Quest:
+        """Запоминает найденный объект на время запроса: get_serializer_class и сам обработчик
+        обращаются к get_object несколько раз, и без кэша каждый раз выполнялся бы новый запрос к БД"""
+
+        if not hasattr(self, "_quest_object"):
+            self._quest_object = super().get_object()
+        return cast(Quest, self._quest_object)
 
     def get_serializer_class(self) -> type:
         """Определяет класс сериализатора в зависимости от
         совершаемого пользователем действия и его роли по отношению к задаче"""
 
+        if getattr(self, "swagger_fake_view", False):
+            # Генерация схемы документации идет без реального запроса и объекта, get_object() здесь вызывать нельзя
+            return QuestSerializer
         if self.action == "create":
             self.serializer_class = QuestCreatingSerializer
         elif self.action == "list":
@@ -226,9 +242,8 @@ class QuestViewSet(ModelViewSet):
     def perform_destroy(self, instance: Quest) -> None:
         """Исключает возможность удаления задачи, имеющей подзадачи"""
 
-        quest = self.get_object()
         user = cast(Employee, self.request.user)
-        if not user.is_superuser and quest.creator != user:
+        if not user.is_superuser and instance.creator_id != user.pk:
             raise PermissionDenied("Удалять задачи может только суперпользователь или их создатель")
         try:
             instance.delete()
@@ -333,7 +348,7 @@ class QuestGetTreeView(APIView):
     def get(self, request: Request, pk: int, *args: Any, **kwargs: Any) -> Response:
         """Отображает "дерево подзадач" для выбранной задачи"""
 
-        quest = get_object_or_404(Quest, pk=pk)
+        quest = get_object_or_404(Quest.objects.select_related("creator__activity", "operator__activity"), pk=pk)
         return Response({"tree": get_sub_quests_map(quest)})
 
 

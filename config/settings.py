@@ -22,7 +22,10 @@ SUPER_FIRST_NAME = os.getenv("SUPER_FIRST_NAME")
 SUPER_FATHER_NAME = os.getenv("SUPER_FATHER_NAME")
 SUPER_PASSWORD = os.getenv("SUPER_PASSWORD")
 
-ALLOWED_HOSTS = ["*"]
+# Допустимые значения заголовка Host. Запросы с другим Host Django отклоняет (ошибка 400)
+ALLOWED_HOSTS = [
+    host.strip() for host in (os.getenv("ALLOWED_HOSTS") or "localhost,127.0.0.1").split(",") if host.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -76,7 +79,8 @@ DATABASES = {
         "NAME": os.getenv("DB_NAME"),
         "USER": os.getenv("DB_USER"),
         "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST", "db"),
+        "HOST": os.getenv("DB_HOST") or "db",
+        # DB_PORT из .env - это порт на хосте для доступа к БД из внешних программ, внутри docker-сети он всегда 5432
         "PORT": "5432",
     }
 }
@@ -107,16 +111,22 @@ REST_FRAMEWORK = {
         "rest_framework.filters.OrderingFilter",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Лимиты частоты запросов. Счетчики хранятся в кэше (Redis), поэтому общие для всех процессов gunicorn.
+    # Ограничение включается только на тех контроллерах, где указан throttle_classes (сейчас - вход в систему)
+    "DEFAULT_THROTTLE_RATES": {"login": os.getenv("LOGIN_THROTTLE_RATE") or "10/minute"},
+    # Количество прокси-серверов (nginx) перед приложением. Нужно, чтобы лимит считался по адресу клиента, а не nginx.
+    # 0 - прокси нет, адрес берется из соединения. В продакшене значение 1 задает deploy/docker-compose.yml
+    "NUM_PROXIES": int(os.getenv("NUM_PROXIES") or 0),
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("ACCESS_TOKEN_LIFETIME", 5))),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("REFRESH_TOKEN_LIFETIME", 1))),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("ACCESS_TOKEN_LIFETIME") or 5)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("REFRESH_TOKEN_LIFETIME") or 1)),
 }
 
 LANGUAGE_CODE = "ru-ru"
 
-TIME_ZONE = os.getenv("LOCAL_TIME_ZONE", "UTC")
+TIME_ZONE = os.getenv("LOCAL_TIME_ZONE") or "UTC"
 
 USE_I18N = True
 
@@ -136,17 +146,24 @@ SPECTACULAR_SETTINGS = {
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
 else:
-    CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
-    CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    # Пустые элементы отбрасываются, иначе пустая переменная дала бы список [""]
+    CORS_ALLOWED_ORIGINS = [origin for origin in (os.getenv("CORS_ALLOWED_ORIGINS") or "").split(",") if origin]
+    CSRF_TRUSTED_ORIGINS = [origin for origin in (os.getenv("CSRF_TRUSTED_ORIGINS") or "").split(",") if origin]
 
-CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": "redis://redis:6379/1"}}
+# Redis. Имя хоста "redis" - это имя сервиса в docker compose, вне docker адреса задаются через переменные окружения
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.getenv("CACHE_URL") or "redis://redis:6379/1",
+    }
+}
 
-CELERY_BROKER_URL = "redis://redis:6379/2"
-CELERY_RESULT_BACKEND = "redis://redis:6379/3"
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL") or "redis://redis:6379/2"
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND") or "redis://redis:6379/3"
 CELERY_TIMEZONE = TIME_ZONE
-CELERY_TASK_TRACK_STARTED = os.getenv("CELERY_TASK_TRACK_STARTED", "true").lower() == "true"
-CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", 600))
-CHECK_INTERVAL = int(os.getenv("CELERY_EXPIRED_STATUS_CHECK_INTERVAL", 30))
+CELERY_TASK_TRACK_STARTED = (os.getenv("CELERY_TASK_TRACK_STARTED") or "true").lower() == "true"
+CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT") or 600)
+CHECK_INTERVAL = int(os.getenv("CELERY_EXPIRED_STATUS_CHECK_INTERVAL") or 30)
 CELERY_BEAT_SCHEDULE = {
     "check_dead_line_set_expired": {
         "task": "management.tasks.check_dead_line_set_expired",
@@ -154,6 +171,9 @@ CELERY_BEAT_SCHEDULE = {
     }
 }
 
+
+# Тестовые данные (manage.py test и loaddata) лежат в одной общей папке, а не в каждом приложении
+FIXTURE_DIRS = [BASE_DIR / "fixtures"]
 
 if TEST_MODE:
     SECRET_KEY = "django-secret_test_key"
@@ -172,3 +192,5 @@ if TEST_MODE:
     }
     CSRF_TRUSTED_ORIGINS = ["http://localhost", "https://localhost"]
     CORS_ALLOWED_ORIGINS = ["http://localhost", "https://localhost"]
+    # В тестах Redis недоступен (в CI его нет), а кэш нужен счетчикам ограничения частоты запросов
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
