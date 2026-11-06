@@ -5,6 +5,7 @@ services:
             POSTGRES_DB: ${DB_NAME}
             POSTGRES_USER: ${DB_USER}
             POSTGRES_PASSWORD: ${DB_PASSWORD}
+        # Порты не публикуются: БД доступна только контейнерам внутри сети compose
         volumes:
             - postgres_data:/var/lib/postgresql/data
         healthcheck:
@@ -12,8 +13,10 @@ services:
             interval: 30s
             timeout: 10s
             retries: 5
+        restart: unless-stopped
     redis:
-        image: redis:latest
+        image: redis:7-alpine
+        # Порты не публикуются: Redis доступен только контейнерам внутри сети compose
         healthcheck:
             test: ["CMD", "redis-cli", "ping"]
             interval: 10s
@@ -23,14 +26,10 @@ services:
     celery_worker:
         image: ${IMAGE_NAME}
         command: celery -A config worker --loglevel=${CELERY_LOG_LEVEL:-INFO}
-        environment:
-            - SECRET_KEY=${SECRET_KEY}
-            - DB_NAME=${DB_NAME}
-            - DB_USER=${DB_USER}
-            - DB_PASSWORD=${DB_PASSWORD}
-            - DJANGO_SETTINGS_MODULE=config.settings
-            - CELERY_BROKER_URL=redis://redis/2
-            - CELERY_RESULT_BACKEND=redis://redis/3
+        # Все настройки читаются из .env так же, как у сервиса web. Образ собирается без .env, поэтому без
+        # env_file worker и beat получали бы значения по умолчанию (UTC, интервал 30 минут и т.д.)
+        env_file:
+            - .env
         depends_on:
             db:
                 condition: service_healthy
@@ -40,11 +39,8 @@ services:
     celery_beat:
         image: ${IMAGE_NAME}
         command: celery -A config beat --loglevel=${CELERY_LOG_LEVEL:-INFO}
-        environment:
-            - SECRET_KEY=${SECRET_KEY}
-            - DJANGO_SETTINGS_MODULE=config.settings
-            - CELERY_BROKER_URL=redis://redis:6379/2
-            - CELERY_RESULT_BACKEND=redis://redis:6379/3
+        env_file:
+            - .env
         depends_on:
             db:
                 condition: service_healthy
@@ -57,8 +53,10 @@ services:
             - .env
         volumes:
             - static_volume:/app/staticfiles
-        ports:
-            - "8000:8000"
+        # expose открывает порт только для контейнеров внутри сети compose (nginx). Снаружи приложение доступно
+        # только через nginx на порту 80, прямой доступ к gunicorn в обход nginx закрыт
+        expose:
+            - "8000"
         depends_on:
             db:
                 condition: service_healthy
@@ -70,16 +68,19 @@ services:
                 python manage.py migrate &&
                 python manage.py set_super_user &&
                 gunicorn config.wsgi:application --bind 0.0.0.0:8000"
+        restart: unless-stopped
     nginx:
         build:
             context: ./nginx
+        # Единственный сервис, доступный снаружи: порт 80 сервера направляется на порт 80 контейнера
         ports:
             - "80:80"
         volumes:
-            - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-            - static_volume:/app/staticfiles
+            - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+            - static_volume:/app/staticfiles:ro
         depends_on:
             - web
+        restart: unless-stopped
 volumes:
     postgres_data:
     static_volume:

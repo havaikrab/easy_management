@@ -5,8 +5,11 @@ services:
             POSTGRES_DB: ${DB_NAME}
             POSTGRES_USER: ${DB_USER}
             POSTGRES_PASSWORD: ${DB_PASSWORD}
+        # Формат "адрес:порт_на_компьютере:порт_в_контейнере". Адрес 127.0.0.1 открывает БД только для программ
+        # на вашем компьютере (pgAdmin, psql, локальные тесты), но не для других устройств в сети.
+        # Контейнеры внутри compose обращаются к БД по имени сервиса "db" и порту 5432, публикация для них не нужна
         ports:
-            - "${DB_PORT:-5432}:5432"
+            - "127.0.0.1:${DB_PORT:-5432}:5432"
         volumes:
             - postgres_data:/var/lib/postgresql/data
         healthcheck:
@@ -14,10 +17,13 @@ services:
             interval: 30s
             timeout: 10s
             retries: 5
+        restart: unless-stopped
     redis:
-        image: redis:latest
+        image: redis:7-alpine
+        # Публикация нужна только для отладки (redis-cli с компьютера). Приложение, worker и beat подключаются
+        # по имени сервиса "redis" внутри сети compose
         ports:
-            - "${REDIS_PORT:-6379}:6379"
+            - "127.0.0.1:${REDIS_PORT:-6379}:6379"
         healthcheck:
             test: ["CMD", "redis-cli", "ping"]
             interval: 10s
@@ -29,14 +35,10 @@ services:
         volumes:
             - .:/app
         command: celery -A config worker --loglevel=${CELERY_LOG_LEVEL:-INFO}
-        environment:
-            - SECRET_KEY=${SECRET_KEY}
-            - DB_NAME=${DB_NAME}
-            - DB_USER=${DB_USER}
-            - DB_PASSWORD=${DB_PASSWORD}
-            - DJANGO_SETTINGS_MODULE=config.settings
-            - CELERY_BROKER_URL=redis://redis:6379/2
-            - CELERY_RESULT_BACKEND=redis://redis:6379/3
+        # Все настройки (БД, часовой пояс, лимиты Celery) читаются из .env так же, как у сервиса web.
+        # Адреса Redis не указываются, в settings.py используются значения по умолчанию для сети compose
+        env_file:
+            - .env
         depends_on:
             db:
                 condition: service_healthy
@@ -48,11 +50,8 @@ services:
         volumes:
             - .:/app
         command: celery -A config beat --loglevel=${CELERY_LOG_LEVEL:-INFO}
-        environment:
-            - SECRET_KEY=${SECRET_KEY}
-            - DJANGO_SETTINGS_MODULE=config.settings
-            - CELERY_BROKER_URL=redis://redis:6379/2
-            - CELERY_RESULT_BACKEND=redis://redis:6379/3
+        env_file:
+            - .env
         depends_on:
             db:
                 condition: service_healthy
@@ -65,7 +64,6 @@ services:
             - .env
         volumes:
             - .:/app
-            - static_volume:/app/static
         ports:
             - "8000:8000"
         depends_on:
@@ -81,4 +79,3 @@ services:
                 python manage.py runserver 0.0.0.0:8000"
 volumes:
     postgres_data:
-    static_volume:

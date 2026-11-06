@@ -76,7 +76,8 @@ DATABASES = {
         "NAME": os.getenv("DB_NAME"),
         "USER": os.getenv("DB_USER"),
         "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST", "db"),
+        "HOST": os.getenv("DB_HOST") or "db",
+        # DB_PORT из .env - это порт на хосте для доступа к БД из внешних программ, внутри docker-сети он всегда 5432
         "PORT": "5432",
     }
 }
@@ -110,13 +111,13 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("ACCESS_TOKEN_LIFETIME", 5))),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("REFRESH_TOKEN_LIFETIME", 1))),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("ACCESS_TOKEN_LIFETIME") or 5)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("REFRESH_TOKEN_LIFETIME") or 1)),
 }
 
 LANGUAGE_CODE = "ru-ru"
 
-TIME_ZONE = os.getenv("LOCAL_TIME_ZONE", "UTC")
+TIME_ZONE = os.getenv("LOCAL_TIME_ZONE") or "UTC"
 
 USE_I18N = True
 
@@ -136,17 +137,24 @@ SPECTACULAR_SETTINGS = {
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
 else:
-    CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
-    CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    # Пустые элементы отбрасываются, иначе пустая переменная дала бы список [""]
+    CORS_ALLOWED_ORIGINS = [origin for origin in (os.getenv("CORS_ALLOWED_ORIGINS") or "").split(",") if origin]
+    CSRF_TRUSTED_ORIGINS = [origin for origin in (os.getenv("CSRF_TRUSTED_ORIGINS") or "").split(",") if origin]
 
-CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": "redis://redis:6379/1"}}
+# Redis. Имя хоста "redis" - это имя сервиса в docker compose, вне docker адреса задаются через переменные окружения
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.getenv("CACHE_URL") or "redis://redis:6379/1",
+    }
+}
 
-CELERY_BROKER_URL = "redis://redis:6379/2"
-CELERY_RESULT_BACKEND = "redis://redis:6379/3"
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL") or "redis://redis:6379/2"
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND") or "redis://redis:6379/3"
 CELERY_TIMEZONE = TIME_ZONE
-CELERY_TASK_TRACK_STARTED = os.getenv("CELERY_TASK_TRACK_STARTED", "true").lower() == "true"
-CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", 600))
-CHECK_INTERVAL = int(os.getenv("CELERY_EXPIRED_STATUS_CHECK_INTERVAL", 30))
+CELERY_TASK_TRACK_STARTED = (os.getenv("CELERY_TASK_TRACK_STARTED") or "true").lower() == "true"
+CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT") or 600)
+CHECK_INTERVAL = int(os.getenv("CELERY_EXPIRED_STATUS_CHECK_INTERVAL") or 30)
 CELERY_BEAT_SCHEDULE = {
     "check_dead_line_set_expired": {
         "task": "management.tasks.check_dead_line_set_expired",

@@ -1,4 +1,4 @@
-FROM nginx:latest
+FROM nginx:1.28-alpine
 
 RUN mkdir -p /app/staticfiles
 
