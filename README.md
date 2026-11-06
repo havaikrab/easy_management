@@ -53,7 +53,7 @@ SUPER_FIRST_NAME=Иван
 SUPER_PASSWORD=<ваш пароль>
 ```
 
-После первого запуска установите `CREATE_SUPER_ADMIN=False` или удалите переменную. При включённом флаге и существующем `SUPER_ADMIN_NAME` запуск остановится с ошибкой.
+Команда безопасна для повторных запусков: если пользователь с `SUPER_ADMIN_NAME` уже существует, создание пропускается и в лог пишется информационное сообщение, поэтому перезапуск сервера с `CREATE_SUPER_ADMIN=True` не вызывает ошибок. После первого запуска флаг всё же лучше выключить (`CREATE_SUPER_ADMIN=False`) или удалить переменную. Ошибка возникает только если пользователя ещё нет, а обязательные значения (`SUPER_ADMIN_ACTIVITY`, `SUPER_ADMIN_NAME`, `SUPER_LAST_NAME`, `SUPER_FIRST_NAME`, `SUPER_PASSWORD`) не заданы или пусты.
 
 Дальше суперпользователь:
 1. входит в админ-панель;
@@ -93,25 +93,54 @@ SUPER_PASSWORD=<ваш пароль>
 ```bash
 poetry install
 poetry run flake8 .
+poetry run black --check .
 poetry run python manage.py test
 ```
 
 ## CI/CD
 
-GitHub Actions (`.github/workflows/ci.yml`) на каждый push и pull request выполняет цепочку:
+GitHub Actions (`.github/workflows/ci.yml`) состоит из четырёх job'ов:
 
-1. `lint`: flake8.
-2. `test`: миграции и тесты на PostgreSQL 16.
-3. `build`: сборка Docker-образа и публикация в Docker Hub с тегом по хэшу коммита.
-4. `deploy`: подключение к серверу по SSH и перезапуск `docker compose` с новым образом.
+1. `lint`: flake8 и black (`--check`).
+2. `test`: тесты на PostgreSQL 16 (`manage.py test` сам создаёт тестовую БД и применяет миграции).
+3. `build`: сборка Docker-образа. Публикация в Docker Hub (тег по хэшу коммита) выполняется только при push в `main`.
+4. `deploy`: подключение к серверу по SSH и обновление `docker compose` с новым образом.
 
-Для деплоя в репозитории должны быть заданы секреты `DOCKER_HUB_USERNAME`, `DOCKER_HUB_ACCESS_TOKEN`, `SSH_KEY`, `SSH_USER`, `SERVER_IP`.
+Что запускается в разных ситуациях:
+
+| Событие | lint + test | build | Публикация образа | deploy |
+|---|---|---|---|---|
+| Push в любую ветку | да | нет | нет | нет |
+| Pull request в `main` (открытие, новые коммиты) | да | да (проверка Dockerfile) | нет | нет |
+| Merge PR в `main` (это push в `main`) | да | да | да | только если включён |
+
+Пока PR открыт, каждый новый коммит запускает проверки дважды: по событию `push` (проверяется ветка) и по событию `pull_request` (проверяется результат слияния с актуальным `main`). Устаревшие запуски в ветках и PR отменяются автоматически, запуски в `main` не отменяются, чтобы не прервать деплой.
+
+### Настройка репозитория
+
+Secrets (Settings → Secrets and variables → Actions → Secrets):
+
+| Секрет | Назначение |
+|---|---|
+| `DOCKER_HUB_USERNAME`, `DOCKER_HUB_ACCESS_TOKEN` | публикация образа; без них `build` только собирает образ |
+| `SERVER_IP`, `SSH_USER`, `SSH_KEY` | адрес сервера, пользователь и приватный ключ для подключения по SSH |
+| `SSH_KNOWN_HOSTS` | отпечаток ключа сервера, получить командой `ssh-keyscan -H <SERVER_IP>` |
+
+Variables (Settings → Secrets and variables → Actions → Variables):
+
+| Переменная | Назначение |
+|---|---|
+| `DEPLOY_ENABLED` | `true` включает job `deploy`. Пока переменная не задана (нет сервера), деплой пропускается |
+
+Для merge в `main` рекомендуется включить branch protection rule с обязательным pull request и обязательными проверками `lint`, `test` и `build`.
 
 ## Развёртывание на сервере
 
 1. Скопируйте содержимое папки [`deploy/`](deploy/) в рабочую директорию на сервере.
 2. Создайте рядом файл `.env` (шаблон: `.env_template`) и укажите `IMAGE_NAME` с именем образа.
 3. Выполните `docker compose up -d`.
+
+При автоматическом деплое через CI файлы из `deploy/` копируются на сервер в директорию `~/easy-management/`, а в `.env` обновляется только `IMAGE_NAME`. Остальные значения в `.env` (ключи, пароли БД, CORS) нужно создать на сервере вручную до первого деплоя. Также на сервере должен быть установлен Docker.
 
 В продакшен-конфигурации приложение работает под Gunicorn за nginx. Для доступа с внешнего адреса укажите `CORS_ALLOWED_ORIGINS` и `CSRF_TRUSTED_ORIGINS`.
 

@@ -200,14 +200,14 @@ class CreateSuperUserTestCase(APITestCase):
         SUPER_PASSWORD="МихалМихалыч",
     )
     def test_repeated_creating_super_user(self) -> None:
-        """Попытка создать нового супер-пользователя с неуникальным идентификатором"""
+        """Повторный запуск команды с уже существующим идентификатором не вызывает ошибку и не создает дубликат"""
 
         self.assertEqual(len(Employee.objects.filter(is_superuser=True)), 2)
 
-        with self.assertRaises(ValueError):
-            call_command("set_super_user")
+        call_command("set_super_user")
 
         self.assertEqual(len(Employee.objects.filter(is_superuser=True)), 2)
+        self.assertEqual(len(Employee.objects.filter(username="7745AlAl2aec")), 1)
 
     @override_settings(
         CREATE_SUPER_ADMIN=True,
